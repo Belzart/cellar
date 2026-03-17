@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Cellar — Offline</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0A0A0A;
+      color: #F2EDE6;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      text-align: center;
+    }
+    .icon {
+      font-size: 4rem;
+      margin-bottom: 1.5rem;
+    }
+    h1 {
+      font-family: Palatino, Georgia, serif;
+      font-size: 1.75rem;
+      font-weight: 500;
+      margin-bottom: 0.75rem;
+      color: #F2EDE6;
+    }
+    p {
+      color: #78716C;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      max-width: 280px;
+    }
+    .btn {
+      display: inline-block;
+      margin-top: 2rem;
+      padding: 0.875rem 2rem;
+      background: linear-gradient(135deg, #6B1414, #A52020);
+      color: white;
+      border-radius: 1rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="icon">🍷</div>
+  <h1>You're Offline</h1>
+  <p>Cellar needs a connection to load your wines and sync tastings.</p>
+  <button class="btn" onclick="window.location.reload()">
+    Try again
+  </button>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --no-src-dir --import-alias \"@/*\" --yes)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Users/Ryan Belza/AppData/Roaming/**)",
+      "Bash(cmd.exe /c \"where node\")",
+      "Bash(cmd.exe /c \"where npm\")",
+      "Bash(PATH=\"/c/Program Files/nodejs:$PATH\" node --version)",
+      "Bash(cmd.exe /c \"npm install\")",
+      "Bash(cmd.exe /c \"where node && where npm\")",
+      "Bash(powershell.exe -Command \"node --version; npm --version\")",
+      "Bash(npm --version)",
+      "Bash(powershell.exe -Command \"Get-Command node -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source; ls ''C:\\\\Program Files\\\\nodejs\\\\'' 2>$null | head -5\")",
+      "Bash(powershell.exe -Command \"Test-Path ''C:\\\\Program Files\\\\nodejs\\\\node.exe''; Get-Command node -ErrorAction SilentlyContinue | Select-Object Source\")",
+      "Bash(\"/c/Program Files/nodejs/node.exe\" --version)",
+      "Bash(\"/c/Program Files/nodejs/npm.cmd\" --version)",
+      "Bash(\"/c/Program Files/nodejs/npm.cmd\" install)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\")",
+      "Bash(npm install:*)",
+      "Bash(ls \"/c/Users/Ryan Belza/Desktop/Wine app/\"*.*)",
+      "Bash(ls \"/c/Users/Ryan Belza/Desktop/Wine app/\".env*)",
+      "Bash(powershell.exe -Command \"Get-Command git -ErrorAction SilentlyContinue | Select-Object Source\")"
+    ]
+  }
+}

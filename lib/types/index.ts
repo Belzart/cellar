@@ -1,0 +1,269 @@
+// ============================================================
+// Cellar — Core Types
+// These mirror the database schema + add app-layer helpers
+// ============================================================
+
+export type WineStyle =
+  | 'red'
+  | 'white'
+  | 'rosé'
+  | 'sparkling'
+  | 'dessert'
+  | 'fortified'
+  | 'orange'
+  | 'other'
+
+export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed'
+export type ImageType = 'label' | 'shelf' | 'other'
+export type RecommendationTier = 'best_match' | 'safe_bet' | 'wildcard' | 'avoid'
+export type InsightConfidence = 'high' | 'medium' | 'low'
+export type InsightType = 'love' | 'like' | 'dislike' | 'trending'
+
+export interface BlendComponent {
+  varietal: string
+  percentage?: number
+}
+
+// ─── Database Row Types ────────────────────────────────────
+
+export interface UserProfile {
+  id: string
+  display_name: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Wine {
+  id: string
+  canonical_name: string
+  producer: string | null
+  wine_name: string | null
+  vintage: number | null
+  region: string | null
+  country: string | null
+  appellation: string | null
+  varietal: string | null
+  blend_components: BlendComponent[]
+  style: WineStyle | null
+  normalized_search_text: string | null
+  primary_label_image_url: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface WineAlias {
+  id: string
+  wine_id: string
+  raw_name: string
+  source: 'ocr' | 'manual' | 'api'
+  confidence: number
+  created_at: string
+}
+
+export interface UploadedImage {
+  id: string
+  user_id: string
+  type: ImageType
+  storage_path: string
+  storage_bucket: string
+  original_filename: string | null
+  mime_type: string | null
+  width: number | null
+  height: number | null
+  file_size_bytes: number | null
+  uploaded_at: string
+}
+
+export interface ExtractionJob {
+  id: string
+  user_id: string
+  uploaded_image_id: string
+  job_type: 'label' | 'shelf'
+  status: JobStatus
+  raw_model_output: unknown | null
+  parsed_output: ExtractedWineData | null
+  confidence: number | null
+  error_message: string | null
+  retry_count: number
+  created_at: string
+  started_at: string | null
+  completed_at: string | null
+}
+
+export interface Tasting {
+  id: string
+  user_id: string
+  wine_id: string
+  uploaded_image_id: string | null
+  tasted_at: string
+  location_text: string | null
+  rating: number | null
+  notes: string | null
+  would_drink_again: boolean | null
+  is_favorite: boolean
+  price_paid_cents: number | null
+  price_currency: string
+  created_at: string
+  updated_at: string
+}
+
+export interface TastingWithWine extends Tasting {
+  wine: Wine
+}
+
+export interface TasteProfileSnapshot {
+  id: string
+  user_id: string
+  computed_at: string
+  tasting_count: number
+  preferred_varietals: VarietalPreference[]
+  preferred_regions: RegionPreference[]
+  preferred_styles: StylePreference[]
+  disliked_patterns: DislikedPattern[]
+  insights: TasteInsight[]
+  raw_stats: unknown | null
+}
+
+export interface VarietalPreference {
+  varietal: string
+  avg_rating: number
+  count: number
+  weight: number
+}
+
+export interface RegionPreference {
+  region: string
+  country?: string
+  avg_rating: number
+  count: number
+  weight: number
+}
+
+export interface StylePreference {
+  style: WineStyle
+  avg_rating: number
+  count: number
+  percentage: number
+}
+
+export interface DislikedPattern {
+  type: 'varietal' | 'region' | 'style'
+  value: string
+  avg_rating: number
+  count: number
+}
+
+export interface TasteInsight {
+  type: InsightType
+  text: string
+  confidence: InsightConfidence
+  supporting_count: number
+}
+
+export interface RecommendationSession {
+  id: string
+  user_id: string
+  uploaded_image_id: string | null
+  session_type: 'shelf' | 'manual'
+  status: JobStatus
+  model_version: string | null
+  error_message: string | null
+  created_at: string
+  completed_at: string | null
+}
+
+export interface RecommendationCandidate {
+  id: string
+  session_id: string
+  candidate_name_raw: string
+  candidate_producer_raw: string | null
+  candidate_vintage_raw: number | null
+  candidate_varietal_raw: string | null
+  candidate_region_raw: string | null
+  matched_wine_id: string | null
+  match_confidence: number
+  palate_score: number
+  final_score: number
+  recommendation_tier: RecommendationTier | null
+  explanation_text: string | null
+  extracted_data: unknown
+  rank_position: number | null
+  created_at: string
+}
+
+// ─── AI Extraction Types ───────────────────────────────────
+
+export interface ExtractedWineData {
+  producer?: string
+  wine_name?: string
+  vintage?: number
+  region?: string
+  country?: string
+  appellation?: string
+  varietal?: string
+  blend_components?: BlendComponent[]
+  style?: WineStyle
+  confidence: number           // 0-1: overall extraction confidence
+  confidence_notes?: string    // human-readable notes on confidence
+  canonical_name_suggestion?: string
+}
+
+export interface ShelfCandidate {
+  candidate_name_raw: string
+  candidate_producer_raw?: string
+  candidate_vintage_raw?: number
+  candidate_varietal_raw?: string
+  candidate_region_raw?: string
+}
+
+export interface ShelfExtractionResult {
+  candidates: ShelfCandidate[]
+  image_quality: 'good' | 'fair' | 'poor'
+  confidence_notes: string
+}
+
+// ─── App-layer Composite Types ─────────────────────────────
+
+export interface WineWithTastings extends Wine {
+  tastings: Tasting[]
+  tasting_count: number
+  avg_rating: number | null
+  last_tasted_at: string | null
+  is_favorite: boolean
+}
+
+export interface RecommendationSessionWithCandidates extends RecommendationSession {
+  candidates: RecommendationCandidate[]
+  shelf_image_url?: string
+}
+
+// ─── Form / Action Input Types ─────────────────────────────
+
+export interface SaveTastingInput {
+  extracted: ExtractedWineData
+  uploaded_image_id?: string
+  // User-edited fields (override extraction)
+  producer?: string
+  wine_name?: string
+  vintage?: number
+  region?: string
+  country?: string
+  varietal?: string
+  style?: WineStyle
+  canonical_name?: string
+  // Tasting details
+  rating?: number
+  notes?: string
+  location_text?: string
+  tasted_at?: string
+  would_drink_again?: boolean
+  price_paid_cents?: number
+  is_favorite?: boolean
+}
+
+export interface WineMatchResult {
+  wine: Wine | null
+  confidence: number          // 0-1
+  match_type: 'exact' | 'fuzzy' | 'none'
+  similarity_score?: number
+}
