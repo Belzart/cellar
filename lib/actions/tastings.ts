@@ -133,7 +133,14 @@ export async function getRecentTastings(limit = 10): Promise<TastingWithWine[]> 
     .order('tasted_at', { ascending: false })
     .limit(limit)
 
-  return (data as TastingWithWine[]) ?? []
+  if (!data) return []
+
+  // Supabase returns the nested relation as `wines` (the table name).
+  // Our TastingWithWine type expects `wine` (singular). Remap here.
+  return data.map((row) => ({
+    ...row,
+    wine: (row as Record<string, unknown>).wines as TastingWithWine['wine'],
+  })) as TastingWithWine[]
 }
 
 // ── Recompute and save taste profile ─────────────────────
