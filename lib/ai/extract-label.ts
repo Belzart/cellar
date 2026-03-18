@@ -1,13 +1,22 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { ExtractedWineData, WineStyle } from '@/lib/types'
 import {
   LABEL_EXTRACTION_SYSTEM,
   LABEL_EXTRACTION_USER,
 } from './prompts'
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+// Load ANTHROPIC_API_KEY from .env.local directly (Next.js env loading unreliable)
+function getAnthropicKey(): string {
+  if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY
+  try {
+    const envFile = readFileSync(join(process.cwd(), '.env.local'), 'utf8')
+    const match = envFile.match(/^ANTHROPIC_API_KEY=(.+)$/m)
+    if (match) return match[1].trim()
+  } catch { /* ignore */ }
+  throw new Error('ANTHROPIC_API_KEY not found in environment or .env.local')
+}
 
 const VALID_STYLES: WineStyle[] = [
   'red', 'white', 'rosé', 'sparkling', 'dessert', 'fortified', 'orange', 'other',
@@ -20,6 +29,8 @@ export async function extractWineLabel(
   imageBase64: string,
   mimeType: 'image/jpeg' | 'image/png' | 'image/webp' = 'image/jpeg'
 ): Promise<{ raw: unknown; parsed: ExtractedWineData }> {
+  const client = new Anthropic({ apiKey: getAnthropicKey() })
+
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 1024,

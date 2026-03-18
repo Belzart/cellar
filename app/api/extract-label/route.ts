@@ -15,6 +15,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Debug: check env loading
+    const envKeys = Object.keys(process.env).filter(k => k.includes('SUPABASE') || k.includes('ANTHROPIC') || k.includes('APP_URL'))
+    console.log('[extract-label] env keys found:', envKeys)
+
     const { image_id } = await request.json()
     if (!image_id) {
       return NextResponse.json({ error: 'image_id required' }, { status: 400 })
@@ -48,7 +52,8 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (jobError || !job) {
-      return NextResponse.json({ error: 'Failed to create job' }, { status: 500 })
+      console.error('[extract-label] job create error:', jobError)
+      return NextResponse.json({ error: `Failed to create job: ${jobError?.message}` }, { status: 500 })
     }
 
     // Download image from storage to base64
@@ -57,11 +62,12 @@ export async function POST(request: NextRequest) {
       .download(image.storage_path)
 
     if (downloadError || !fileData) {
+      console.error('[extract-label] download error:', downloadError)
       await serviceClient
         .from('extraction_jobs')
         .update({ status: 'failed', error_message: 'Failed to download image', completed_at: new Date().toISOString() })
         .eq('id', job.id)
-      return NextResponse.json({ error: 'Failed to download image' }, { status: 500 })
+      return NextResponse.json({ error: `Failed to download image: ${downloadError?.message}` }, { status: 500 })
     }
 
     // Convert to base64
@@ -79,15 +85,17 @@ export async function POST(request: NextRequest) {
       raw = result.raw
       parsed = result.parsed
     } catch (aiError) {
+      const aiMsg = aiError instanceof Error ? aiError.message : 'AI extraction failed'
+      console.error('[extract-label] AI error:', aiMsg)
       await serviceClient
         .from('extraction_jobs')
         .update({
           status: 'failed',
-          error_message: aiError instanceof Error ? aiError.message : 'AI extraction failed',
+          error_message: aiMsg,
           completed_at: new Date().toISOString(),
         })
         .eq('id', job.id)
-      return NextResponse.json({ error: 'Extraction failed', jobId: job.id }, { status: 500 })
+      return NextResponse.json({ error: `Extraction failed: ${aiMsg}`, jobId: job.id }, { status: 500 })
     }
 
     // Save results

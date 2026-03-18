@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { SaveTastingInput, TastingWithWine } from '@/lib/types'
+import { SaveTastingInput, TastingWithWine, REACTION_WEIGHT } from '@/lib/types'
 import { createOrFindWine } from './wines'
 import { buildCanonicalName } from '@/lib/wine/canonicalize'
 import { computeTasteProfile } from '@/lib/wine/profile'
@@ -42,6 +42,11 @@ export async function saveTasting(
       : undefined,
   })
 
+  // Derive numeric rating from overall_reaction for backward compat
+  const derivedRating = input.overall_reaction
+    ? REACTION_WEIGHT[input.overall_reaction]
+    : (input.rating ?? null)
+
   // Create the tasting record
   const { data: tasting, error } = await supabase
     .from('tastings')
@@ -51,8 +56,12 @@ export async function saveTasting(
       uploaded_image_id: input.uploaded_image_id ?? null,
       tasted_at: input.tasted_at ?? new Date().toISOString(),
       location_text: input.location_text ?? null,
-      rating: input.rating ?? null,
+      rating: derivedRating,
       notes: input.notes ?? null,
+      overall_reaction: input.overall_reaction ?? null,
+      vibe_tags: input.vibe_tags ?? [],
+      memory_note: input.memory_note ?? null,
+      body_score: input.body_score ?? null,
       would_drink_again: input.would_drink_again ?? null,
       is_favorite: input.is_favorite ?? false,
       price_paid_cents: input.price_paid_cents ?? null,
@@ -79,6 +88,10 @@ export async function updateTasting(
   updates: Partial<{
     rating: number
     notes: string
+    overall_reaction: string
+    vibe_tags: string[]
+    memory_note: string
+    body_score: number
     location_text: string
     tasted_at: string
     would_drink_again: boolean
@@ -146,12 +159,12 @@ export async function getRecentTastings(limit = 10): Promise<TastingWithWine[]> 
 // ── Recompute and save taste profile ─────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function recomputeProfile(userId: string, supabase: any): Promise<void> {
-  // Fetch all rated tastings with wine data
+  // Fetch all tastings that have either a rating or an overall_reaction
   const { data } = await supabase
     .from('tastings')
     .select(`*, wines(*)`)
     .eq('user_id', userId)
-    .not('rating', 'is', null)
+    .or('rating.not.is.null,overall_reaction.not.is.null')
     .order('tasted_at', { ascending: false })
 
   if (!data || data.length === 0) return

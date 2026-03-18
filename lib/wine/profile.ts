@@ -8,6 +8,8 @@ import {
   TasteInsight,
   WineStyle,
   RecommendationCandidate,
+  OverallReaction,
+  REACTION_WEIGHT,
 } from '@/lib/types'
 
 // ── Thresholds ────────────────────────────────────────────
@@ -20,6 +22,16 @@ const LOVE_THRESHOLD = 4.0      // avg rating ≥ this = "love"
 const LIKE_THRESHOLD = 3.5      // avg rating ≥ this = "like"
 const DISLIKE_THRESHOLD = 2.5   // avg rating ≤ this = "dislike"
 const HIGH_CONFIDENCE_COUNT = 5 // need this many tastings for "high" confidence
+const VIBE_TAG_INSIGHT_MIN = 3  // min appearances to generate a vibe insight
+
+// ── Resolve effective rating from tasting ─────────────────
+// Prefers overall_reaction → falls back to numeric rating
+function effectiveRating(t: TastingWithWine): number | null {
+  if (t.overall_reaction) {
+    return REACTION_WEIGHT[t.overall_reaction as OverallReaction] ?? null
+  }
+  return t.rating ?? null
+}
 
 // ── Main computation ──────────────────────────────────────
 export function computeTasteProfile(
@@ -43,22 +55,26 @@ export function computeTasteProfile(
 
   if (tastings.length < MIN_TASTINGS_FOR_ANY_INSIGHT) return empty
 
-  // Only use tastings with ratings
-  const rated = tastings.filter((t) => t.rating != null)
+  // Only use tastings with an effective rating
+  const rated = tastings.filter((t) => effectiveRating(t) != null)
   if (rated.length < MIN_TASTINGS_FOR_ANY_INSIGHT) return empty
 
   // Apply recency weighting
   const weighted = rated.map((t) => {
     const monthsAgo = monthsBetween(new Date(t.tasted_at), now)
     const recencyWeight = monthsAgo <= RECENCY_MONTHS ? RECENCY_MULTIPLIER : 1.0
-    return { ...t, w: recencyWeight }
+    return { ...t, w: recencyWeight, _effectiveRating: effectiveRating(t)! }
   })
 
   const preferred_varietals = computeVarietalPrefs(weighted)
   const preferred_regions = computeRegionPrefs(weighted)
   const preferred_styles = computeStylePrefs(weighted)
   const disliked_patterns = computeDisliked(preferred_varietals, preferred_regions, preferred_styles)
-  const insights = generateInsights(preferred_varietals, preferred_regions, preferred_styles, weighted.length)
+
+  // Vibe tag analysis
+  const vibeInsights = computeVibeInsights(rated)
+  const structuredInsights = generateInsights(preferred_varietals, preferred_regions, preferred_styles, weighted.length)
+  const insights = [...structuredInsights, ...vibeInsights]
 
   return {
     ...empty,
@@ -69,22 +85,22 @@ export function computeTasteProfile(
     insights,
     raw_stats: {
       total_rated: rated.length,
-      avg_rating_overall: avg(rated.map((t) => t.rating!)),
+      avg_rating_overall: avg(weighted.map((t) => t._effectiveRating)),
     },
   }
 }
 
 // ── Varietal preferences ──────────────────────────────────
 function computeVarietalPrefs(
-  tastings: Array<TastingWithWine & { w: number }>
+  tastings: Array<TastingWithWine & { w: number; _effectiveRating: number }>
 ): VarietalPreference[] {
   const map = new Map<string, { ratings: number[]; weights: number[] }>()
 
   for (const t of tastings) {
     const v = t.wine?.varietal
-    if (!v || !t.rating) continue
+    if (!v) continue
     if (!map.has(v)) map.set(v, { ratings: [], weights: [] })
-    map.get(v)!.ratings.push(t.rating)
+    map.get(v)!.ratings.push(t._effectiveRating)
     map.get(v)!.weights.push(t.w)
   }
 
@@ -92,7 +108,6 @@ function computeVarietalPrefs(
   for (const [varietal, data] of map) {
     if (data.ratings.length < MIN_VARIETAL_TASTINGS) continue
     const avg_rating = weightedAvg(data.ratings, data.weights)
-    // weight = avg_rating × log(count + 1) — balances quality vs quantity
     const weight = avg_rating * Math.log(data.ratings.length + 1)
     prefs.push({ varietal, avg_rating: round1(avg_rating), count: data.ratings.length, weight })
   }
@@ -102,15 +117,15 @@ function computeVarietalPrefs(
 
 // ── Region preferences ────────────────────────────────────
 function computeRegionPrefs(
-  tastings: Array<TastingWithWine & { w: number }>
+  tastings: Array<TastingWithWine & { w: number; _effectiveRating: number }>
 ): RegionPreference[] {
   const map = new Map<string, { ratings: number[]; weights: number[]; country?: string }>()
 
   for (const t of tastings) {
     const r = t.wine?.region
-    if (!r || !t.rating) continue
+    if (!r) continue
     if (!map.has(r)) map.set(r, { ratings: [], weights: [], country: t.wine?.country ?? undefined })
-    map.get(r)!.ratings.push(t.rating)
+    map.get(r)!.ratings.push(t._effectiveRating)
     map.get(r)!.weights.push(t.w)
   }
 
@@ -133,18 +148,18 @@ function computeRegionPrefs(
 
 // ── Style preferences ─────────────────────────────────────
 function computeStylePrefs(
-  tastings: Array<TastingWithWine & { w: number }>
+  tastings: Array<TastingWithWine & { w: number; _effectiveRating: number }>
 ): StylePreference[] {
   const map = new Map<WineStyle, { ratings: number[] }>()
 
   for (const t of tastings) {
     const s = t.wine?.style as WineStyle | undefined
-    if (!s || !t.rating) continue
+    if (!s) continue
     if (!map.has(s)) map.set(s, { ratings: [] })
-    map.get(s)!.ratings.push(t.rating)
+    map.get(s)!.ratings.push(t._effectiveRating)
   }
 
-  const total = tastings.filter((t) => t.wine?.style && t.rating).length
+  const total = tastings.filter((t) => t.wine?.style).length
   const prefs: StylePreference[] = []
   for (const [style, data] of map) {
     const avg_rating = avg(data.ratings)
@@ -184,6 +199,61 @@ function computeDisliked(
   }
 
   return patterns
+}
+
+// ── Vibe tag insights ─────────────────────────────────────
+function computeVibeInsights(rated: TastingWithWine[]): TasteInsight[] {
+  // Count tag appearances by sentiment bucket
+  const loveTagCount = new Map<string, number>()
+  const dislikeTagCount = new Map<string, number>()
+
+  for (const t of rated) {
+    if (!t.vibe_tags || t.vibe_tags.length === 0) continue
+    const r = t.overall_reaction as OverallReaction | null
+    const weight = r ? REACTION_WEIGHT[r] : (t.rating ?? 3)
+
+    for (const tag of t.vibe_tags) {
+      if (weight >= 4) {
+        loveTagCount.set(tag, (loveTagCount.get(tag) ?? 0) + 1)
+      } else if (weight <= 2) {
+        dislikeTagCount.set(tag, (dislikeTagCount.get(tag) ?? 0) + 1)
+      }
+    }
+  }
+
+  const insights: TasteInsight[] = []
+
+  // Top loved tag
+  const topLove = [...loveTagCount.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .find(([, count]) => count >= VIBE_TAG_INSIGHT_MIN)
+
+  if (topLove) {
+    const [tag, count] = topLove
+    insights.push({
+      type: 'love',
+      text: `You tend to love ${tag.replace(/_/g, ' ')} wines`,
+      confidence: count >= HIGH_CONFIDENCE_COUNT ? 'high' : 'medium',
+      supporting_count: count,
+    })
+  }
+
+  // Top disliked tag
+  const topDislike = [...dislikeTagCount.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .find(([, count]) => count >= VIBE_TAG_INSIGHT_MIN)
+
+  if (topDislike) {
+    const [tag, count] = topDislike
+    insights.push({
+      type: 'dislike',
+      text: `You often mark ${tag.replace(/_/g, ' ')} wines as not for you`,
+      confidence: count >= HIGH_CONFIDENCE_COUNT ? 'high' : 'medium',
+      supporting_count: count,
+    })
+  }
+
+  return insights
 }
 
 // ── Generate human-readable insights ─────────────────────
@@ -266,7 +336,6 @@ export function scoreCandidate(
   profile: TasteProfileSnapshot
 ): number {
   let score = 0.5  // neutral baseline
-  let adjustments = 0
 
   if (candidate.candidate_varietal_raw) {
     const varPref = profile.preferred_varietals.find(
@@ -276,7 +345,6 @@ export function scoreCandidate(
       // Scale avg_rating (1-5) to adjustment (-0.3 to +0.3)
       const adjustment = ((varPref.avg_rating - 3) / 2) * 0.3
       score += adjustment
-      adjustments++
     }
   }
 
@@ -288,7 +356,6 @@ export function scoreCandidate(
     if (regPref) {
       const adjustment = ((regPref.avg_rating - 3) / 2) * 0.2
       score += adjustment
-      adjustments++
     }
   }
 

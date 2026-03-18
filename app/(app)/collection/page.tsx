@@ -32,7 +32,7 @@ export default function CollectionPage() {
         sort: filters.sort,
         favorites: filters.favorites || undefined,
       })
-      setWines(results)
+      setWines(results ?? [])
     } finally {
       setLoading(false)
     }
@@ -42,7 +42,7 @@ export default function CollectionPage() {
     fetchWines()
   }, [fetchWines])
 
-  const isEmpty = !loading && wines.length === 0
+  const isEmpty = !loading && (wines ?? []).length === 0
   const isFiltered = filters.search || filters.style || filters.favorites || filters.sort !== 'recent'
 
   return (

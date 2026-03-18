@@ -1,9 +1,26 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { Heart } from 'lucide-react'
-import { WineWithTastings } from '@/lib/types'
+import { WineWithTastings, OverallReaction, REACTION_LABELS } from '@/lib/types'
 import { STYLE_COLORS, STYLE_LABELS, cn } from '@/lib/utils'
-import { RatingBadge } from './RatingStars'
+
+const REACTION_EMOJI: Record<OverallReaction, string> = {
+  obsessed:    '🤩',
+  loved_it:    '😍',
+  liked_it:    '😊',
+  okay:        '😐',
+  not_for_me:  '😕',
+}
+
+function ReactionBadge({ tastings }: { tastings: WineWithTastings['tastings'] }) {
+  const reaction = tastings[0]?.overall_reaction as OverallReaction | null
+  if (!reaction) return null
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-sm leading-none">{REACTION_EMOJI[reaction]}</span>
+    </div>
+  )
+}
 
 interface WineCardProps {
   wine: WineWithTastings
@@ -58,7 +75,7 @@ export default function WineCard({ wine, variant = 'grid' }: WineCardProps) {
 
           {/* Rating + favorite */}
           <div className="flex flex-col items-end gap-1 flex-shrink-0">
-            <RatingBadge rating={wine.avg_rating} />
+            <ReactionBadge tastings={wine.tastings} />
             {wine.is_favorite && (
               <Heart className="w-4 h-4 fill-wine text-wine" />
             )}
@@ -103,7 +120,7 @@ export default function WineCard({ wine, variant = 'grid' }: WineCardProps) {
             )}
             <div className="flex items-center justify-between mt-2">
               <span className="text-cream/50 text-xs">{wine.vintage}</span>
-              <RatingBadge rating={wine.avg_rating} />
+              <ReactionBadge tastings={wine.tastings} />
             </div>
           </div>
         </div>
@@ -154,7 +171,7 @@ export default function WineCard({ wine, variant = 'grid' }: WineCardProps) {
           )}
           <div className="flex items-center justify-between mt-2">
             <span className="text-text-tertiary text-xs">{wine.vintage ?? '—'}</span>
-            <RatingBadge rating={wine.avg_rating} />
+            <ReactionBadge tastings={wine.tastings} />
           </div>
         </div>
       </div>

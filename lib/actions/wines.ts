@@ -27,6 +27,10 @@ export async function getMyWines(params?: {
     .select(`
       wine_id,
       rating,
+      overall_reaction,
+      vibe_tags,
+      memory_note,
+      body_score,
       is_favorite,
       tasted_at,
       wines (
@@ -44,32 +48,57 @@ export async function getMyWines(params?: {
   if (!tastingRows) return []
 
   // Aggregate tastings by wine_id
-  const wineMap = new Map<string, WineWithTastings>()
+  // Track: {wine, tasting_count, ratings[], latest_row, is_favorite, last_tasted_at}
+  type Acc = {
+    wine: Wine
+    tasting_count: number
+    ratings: number[]
+    is_favorite: boolean
+    last_tasted_at: string | null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    latest_row: any | null
+  }
+  const accMap = new Map<string, Acc>()
+
   for (const row of tastingRows) {
     const wine = row.wines as unknown as Wine
     if (!wine) continue
 
-    if (!wineMap.has(wine.id)) {
-      wineMap.set(wine.id, {
-        ...wine,
-        tastings: [],
+    if (!accMap.has(wine.id)) {
+      accMap.set(wine.id, {
+        wine,
         tasting_count: 0,
-        avg_rating: null,
-        last_tasted_at: null,
+        ratings: [],
         is_favorite: false,
+        last_tasted_at: null,
+        latest_row: null,
       })
     }
 
-    const entry = wineMap.get(wine.id)!
-    entry.tasting_count++
-    if (row.is_favorite) entry.is_favorite = true
-    if (!entry.last_tasted_at || row.tasted_at > entry.last_tasted_at) {
-      entry.last_tasted_at = row.tasted_at
+    const acc = accMap.get(wine.id)!
+    acc.tasting_count++
+    if (row.is_favorite) acc.is_favorite = true
+    if (row.rating) acc.ratings.push(row.rating)
+
+    if (!acc.last_tasted_at || row.tasted_at > acc.last_tasted_at) {
+      acc.last_tasted_at = row.tasted_at
+      acc.latest_row = row
     }
-    if (row.rating) {
-      const ratings = [...(entry.tastings.map((t) => t.rating).filter(Boolean) as number[]), row.rating]
-      entry.avg_rating = ratings.reduce((a, b) => a + b, 0) / ratings.length
-    }
+  }
+
+  const wineMap = new Map<string, WineWithTastings>()
+  for (const [wineId, acc] of accMap) {
+    wineMap.set(wineId, {
+      ...acc.wine,
+      // Provide the most recent tasting so components can read overall_reaction etc.
+      tastings: acc.latest_row ? [acc.latest_row] : [],
+      tasting_count: acc.tasting_count,
+      avg_rating: acc.ratings.length
+        ? acc.ratings.reduce((a, b) => a + b, 0) / acc.ratings.length
+        : null,
+      last_tasted_at: acc.last_tasted_at,
+      is_favorite: acc.is_favorite,
+    })
   }
 
   let wines = Array.from(wineMap.values())

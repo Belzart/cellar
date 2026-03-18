@@ -3,6 +3,38 @@
 // These mirror the database schema + add app-layer helpers
 // ============================================================
 
+// ── Vibe System ────────────────────────────────────────────
+
+export type OverallReaction = 'obsessed' | 'loved_it' | 'liked_it' | 'okay' | 'not_for_me'
+
+export const REACTION_LABELS: Record<OverallReaction, string> = {
+  obsessed: 'Obsessed',
+  loved_it: 'Loved it',
+  liked_it: 'Liked it',
+  okay: 'Okay',
+  not_for_me: 'Not for me',
+}
+
+export const REACTION_WEIGHT: Record<OverallReaction, number> = {
+  obsessed: 5,
+  loved_it: 4,
+  liked_it: 3,
+  okay: 2,
+  not_for_me: 1,
+}
+
+export const VIBE_TAGS = [
+  'bold', 'soft', 'smooth', 'sharp', 'dry', 'juicy', 'rich', 'light',
+  'flat', 'oaky', 'elegant', 'cozy', 'serious', 'fun', 'forgettable',
+  'special', 'too_soft', 'too_heavy', 'too_dry', 'too_sharp', 'too_watery',
+  'structured', 'delicate', 'complex', 'simple', 'powerful', 'refreshing',
+  'warming', 'surprising',
+] as const
+
+export type VibeTag = typeof VIBE_TAGS[number]
+
+// ──────────────────────────────────────────────────────────
+
 export type WineStyle =
   | 'red'
   | 'white'
@@ -99,6 +131,10 @@ export interface Tasting {
   location_text: string | null
   rating: number | null
   notes: string | null
+  overall_reaction: OverallReaction | null
+  vibe_tags: string[]
+  memory_note: string | null
+  body_score: number | null
   would_drink_again: boolean | null
   is_favorite: boolean
   price_paid_cents: number | null
@@ -251,12 +287,18 @@ export interface SaveTastingInput {
   varietal?: string
   style?: WineStyle
   canonical_name?: string
-  // Tasting details
+  // Tasting details — legacy
   rating?: number
   notes?: string
+  would_drink_again?: boolean
+  // Vibe system
+  overall_reaction?: OverallReaction
+  vibe_tags?: string[]
+  memory_note?: string
+  body_score?: number
+  // Context
   location_text?: string
   tasted_at?: string
-  would_drink_again?: boolean
   price_paid_cents?: number
   is_favorite?: boolean
 }

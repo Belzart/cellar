@@ -1,16 +1,26 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { ShelfExtractionResult } from '@/lib/types'
 import { SHELF_EXTRACTION_SYSTEM, SHELF_EXTRACTION_USER } from './prompts'
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+function getAnthropicKey(): string {
+  if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY
+  try {
+    const envFile = readFileSync(join(process.cwd(), '.env.local'), 'utf8')
+    const match = envFile.match(/^ANTHROPIC_API_KEY=(.+)$/m)
+    if (match) return match[1].trim()
+  } catch { /* ignore */ }
+  throw new Error('ANTHROPIC_API_KEY not found in environment or .env.local')
+}
 
 // ── Main shelf analysis function ──────────────────────────
 export async function analyzeShelfPhoto(
   imageBase64: string,
   mimeType: 'image/jpeg' | 'image/png' | 'image/webp' = 'image/jpeg'
 ): Promise<{ raw: unknown; parsed: ShelfExtractionResult }> {
+  const client = new Anthropic({ apiKey: getAnthropicKey() })
+
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 2048,

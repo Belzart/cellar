@@ -2,8 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { ExtractedWineData, WineStyle, SaveTastingInput } from '@/lib/types'
-import RatingStars from '@/components/wine/RatingStars'
+import { ExtractedWineData, WineStyle, SaveTastingInput, OverallReaction, REACTION_LABELS, VIBE_TAGS } from '@/lib/types'
 import { cn, STYLE_LABELS } from '@/lib/utils'
 import { buildCanonicalName } from '@/lib/wine/canonicalize'
 import { AlertCircle, CheckCircle2 } from 'lucide-react'
@@ -17,6 +16,29 @@ interface ExtractionReviewProps {
 
 const WINE_STYLES: WineStyle[] = ['red', 'white', 'rosé', 'sparkling', 'dessert', 'fortified', 'orange', 'other']
 
+// Show the most useful vibe tags in the UI (can expand to show all)
+const PRIMARY_VIBE_TAGS = [
+  'bold', 'soft', 'smooth', 'dry', 'juicy', 'rich', 'light',
+  'oaky', 'elegant', 'cozy', 'fun', 'forgettable', 'special',
+  'complex', 'simple', 'refreshing', 'warming', 'surprising',
+] as const
+
+const REACTION_OPTIONS: { value: OverallReaction; emoji: string }[] = [
+  { value: 'obsessed',    emoji: '🤩' },
+  { value: 'loved_it',   emoji: '😍' },
+  { value: 'liked_it',   emoji: '😊' },
+  { value: 'okay',       emoji: '😐' },
+  { value: 'not_for_me', emoji: '😕' },
+]
+
+const BODY_LABELS: Record<number, string> = {
+  1: 'Very light',
+  2: 'Light',
+  3: 'Medium',
+  4: 'Full',
+  5: 'Very full',
+}
+
 export default function ExtractionReview({
   extracted,
   imageUrl,
@@ -25,8 +47,9 @@ export default function ExtractionReview({
 }: ExtractionReviewProps) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showAllVibes, setShowAllVibes] = useState(false)
 
-  // Editable fields — initialized from extracted data
+  // Editable wine detail fields
   const [producer, setProducer] = useState(extracted.producer ?? '')
   const [wineName, setWineName] = useState(extracted.wine_name ?? '')
   const [vintage, setVintage] = useState(extracted.vintage?.toString() ?? '')
@@ -35,16 +58,25 @@ export default function ExtractionReview({
   const [varietal, setVarietal] = useState(extracted.varietal ?? '')
   const [style, setStyle] = useState<WineStyle | ''>(extracted.style ?? '')
 
-  // Tasting fields
-  const [rating, setRating] = useState<number | null>(null)
-  const [notes, setNotes] = useState('')
+  // Vibe fields
+  const [reaction, setReaction] = useState<OverallReaction | null>(null)
+  const [vibeTags, setVibeTags] = useState<string[]>([])
+  const [memoryNote, setMemoryNote] = useState('')
+  const [bodyScore, setBodyScore] = useState<number | null>(null)
   const [location, setLocation] = useState('')
-  const [wouldDrinkAgain, setWouldDrinkAgain] = useState<boolean | null>(null)
   const [price, setPrice] = useState('')
 
   const confidenceColor =
     extracted.confidence >= 0.8 ? 'text-emerald-400' :
     extracted.confidence >= 0.5 ? 'text-gold' : 'text-orange-400'
+
+  function toggleVibeTag(tag: string) {
+    setVibeTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    )
+  }
+
+  const displayedVibes = showAllVibes ? VIBE_TAGS : PRIMARY_VIBE_TAGS
 
   async function handleSave() {
     setSaving(true)
@@ -70,10 +102,13 @@ export default function ExtractionReview({
         country: country || undefined,
         varietal: varietal || undefined,
         style: (style as WineStyle) || undefined,
-        rating: rating ?? undefined,
-        notes: notes || undefined,
+        // Vibe system
+        overall_reaction: reaction ?? undefined,
+        vibe_tags: vibeTags.length > 0 ? vibeTags : undefined,
+        memory_note: memoryNote || undefined,
+        body_score: bodyScore ?? undefined,
+        // Context
         location_text: location || undefined,
-        would_drink_again: wouldDrinkAgain ?? undefined,
         price_paid_cents: price ? Math.round(parseFloat(price) * 100) : undefined,
       })
     } catch (err) {
@@ -210,52 +245,114 @@ export default function ExtractionReview({
         </div>
       </section>
 
-      {/* ── My Tasting Notes ── */}
+      {/* ── How did it make you feel? ── */}
       <section>
-        <h2 className="label mb-3">My Tasting Notes</h2>
-        <div className="space-y-3">
-          {/* Rating */}
-          <div>
-            <label className="text-text-secondary text-xs mb-2 block">Rating</label>
-            <RatingStars value={rating} onChange={setRating} size="lg" showEmpty />
-          </div>
+        <h2 className="label mb-3">How Was It?</h2>
+        <div className="space-y-5">
 
-          {/* Notes */}
+          {/* Overall reaction — required */}
           <div>
-            <label className="text-text-secondary text-xs mb-1 block">Notes</label>
-            <textarea
-              className="input min-h-[80px] resize-none"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Dark cherry, hint of oak, long finish…"
-              rows={3}
-            />
-          </div>
-
-          {/* Would drink again */}
-          <div>
-            <label className="text-text-secondary text-xs mb-2 block">Would you drink this again?</label>
+            <label className="text-text-secondary text-xs mb-3 block">Overall reaction</label>
             <div className="flex gap-2">
-              {[
-                { value: true,  label: 'Yes' },
-                { value: false, label: 'No'  },
-                { value: null,  label: 'Not sure' },
-              ].map((opt) => (
+              {REACTION_OPTIONS.map(({ value, emoji }) => (
                 <button
-                  key={String(opt.value)}
+                  key={value}
                   type="button"
-                  onClick={() => setWouldDrinkAgain(opt.value)}
+                  onClick={() => setReaction(reaction === value ? null : value)}
                   className={cn(
-                    'flex-1 py-2.5 rounded-xl text-sm font-medium border transition-all duration-100 active:scale-95',
-                    wouldDrinkAgain === opt.value
+                    'flex-1 flex flex-col items-center gap-1 py-3 rounded-2xl border text-xs font-medium transition-all duration-100 active:scale-95',
+                    reaction === value
                       ? 'bg-wine border-wine text-white'
                       : 'bg-bg-elevated border-border text-text-secondary'
                   )}
                 >
-                  {opt.label}
+                  <span className="text-xl leading-none">{emoji}</span>
+                  <span className="leading-tight text-center" style={{ fontSize: '10px' }}>
+                    {REACTION_LABELS[value]}
+                  </span>
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Vibe tags — optional */}
+          <div>
+            <label className="text-text-secondary text-xs mb-3 block">
+              Vibe tags <span className="text-text-tertiary">(optional)</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {displayedVibes.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => toggleVibeTag(tag)}
+                  className={cn(
+                    'px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-100 active:scale-95',
+                    vibeTags.includes(tag)
+                      ? 'bg-gold/20 border-gold text-gold'
+                      : 'bg-bg-elevated border-border text-text-secondary'
+                  )}
+                >
+                  {tag.replace(/_/g, ' ')}
+                </button>
+              ))}
+            </div>
+            {!showAllVibes && (
+              <button
+                type="button"
+                onClick={() => setShowAllVibes(true)}
+                className="mt-2 text-xs text-text-tertiary underline"
+              >
+                Show more tags
+              </button>
+            )}
+          </div>
+
+          {/* Memory note — optional */}
+          <div>
+            <label className="text-text-secondary text-xs mb-1 block">
+              Memory note <span className="text-text-tertiary">(optional)</span>
+            </label>
+            <textarea
+              className="input min-h-[80px] resize-none"
+              value={memoryNote}
+              onChange={(e) => setMemoryNote(e.target.value)}
+              placeholder="How did it feel? What do you remember about it?"
+              rows={3}
+            />
+          </div>
+
+          {/* Body slider — optional */}
+          <div>
+            <label className="text-text-secondary text-xs mb-2 block">
+              Body <span className="text-text-tertiary">(optional)</span>
+            </label>
+            <div className="flex items-center gap-3">
+              <span className="text-text-tertiary text-xs w-16 text-right">Light</span>
+              <div className="flex gap-2 flex-1 justify-between">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setBodyScore(bodyScore === n ? null : n)}
+                    className={cn(
+                      'w-9 h-9 rounded-full border text-xs font-medium transition-all duration-100 active:scale-95',
+                      bodyScore === n
+                        ? 'bg-wine border-wine text-white'
+                        : 'bg-bg-elevated border-border text-text-secondary'
+                    )}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <span className="text-text-tertiary text-xs w-16">Full</span>
+            </div>
+            {bodyScore && (
+              <p className="text-center text-text-tertiary text-xs mt-1.5">
+                {BODY_LABELS[bodyScore]}
+              </p>
+            )}
           </div>
 
           {/* Location + price */}

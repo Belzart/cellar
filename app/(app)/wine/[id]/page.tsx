@@ -2,11 +2,10 @@ import { notFound } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { getWineDetail } from '@/lib/actions/wines'
-import { getSignedUrl } from '@/lib/actions/upload'
 import TastingCard from '@/components/wine/TastingCard'
-import RatingStars, { RatingBadge } from '@/components/wine/RatingStars'
 import { createClient } from '@/lib/supabase/server'
-import { STYLE_COLORS, STYLE_LABELS, cn, formatDate } from '@/lib/utils'
+import { STYLE_COLORS, STYLE_LABELS, cn } from '@/lib/utils'
+import { REACTION_LABELS, OverallReaction } from '@/lib/types'
 import { ChevronLeft, Heart, Grape, MapPin, Calendar } from 'lucide-react'
 
 interface WineDetailPageProps {
@@ -107,19 +106,23 @@ export default async function WineDetailPage({ params }: WineDetailPageProps) {
             <p className="text-text-secondary text-base mt-0.5">{wine.wine_name}</p>
           )}
 
-          {/* Rating summary */}
-          <div className="flex items-center gap-4 mt-3">
-            {wine.avg_rating && (
-              <>
-                <RatingBadge rating={wine.avg_rating} />
-                <span className="text-text-tertiary text-sm">
-                  {wine.tasting_count} tasting{wine.tasting_count !== 1 ? 's' : ''}
+          {/* Tasting summary */}
+          <div className="flex items-center gap-3 mt-3 flex-wrap">
+            {wine.tasting_count > 0 && (
+              <span className="text-text-tertiary text-sm">
+                {wine.tasting_count} tasting{wine.tasting_count !== 1 ? 's' : ''}
+              </span>
+            )}
+            {/* Show most recent reaction if available */}
+            {(() => {
+              const latestReaction = wine.tastings[0]?.overall_reaction as OverallReaction | null
+              if (!latestReaction) return null
+              return (
+                <span className="text-text-secondary text-sm">
+                  · {REACTION_LABELS[latestReaction]}
                 </span>
-              </>
-            )}
-            {!wine.avg_rating && (
-              <span className="text-text-tertiary text-sm">No rating yet</span>
-            )}
+              )
+            })()}
           </div>
         </div>
 
