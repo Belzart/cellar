@@ -30,7 +30,9 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
       "Bash(npm run:*)",
       "Bash(head -5 \"/c/Users/Ryan Belza/Desktop/Wine app/app/\\(auth\\)/login/page.tsx\")",
-      "Bash(ls \"/c/Users/Ryan Belza/Desktop/Wine app/app/\\(auth\\)/\")"
+      "Bash(ls \"/c/Users/Ryan Belza/Desktop/Wine app/app/\\(auth\\)/\")",
+      "Bash(node -e \"console.log\\(require\\(''./node_modules/next/package.json''\\).version\\)\")",
+      "Bash(npm view:*)"
     ]
   }
 }
