@@ -5,10 +5,14 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Wine } from 'lucide-react'
 
+type Method = 'email' | 'phone'
+type Stage = 'input' | 'otp'
+
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
-  const [stage, setStage] = useState<'email' | 'otp'>('email')
+  const [method, setMethod] = useState<Method>('email')
+  const [contact, setContact] = useState('')
+  const [stage, setStage] = useState<Stage>('input')
   const [otp, setOtp] = useState(['', '', '', '', '', ''])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -16,43 +20,69 @@ export default function LoginPage() {
 
   const supabase = createClient()
 
-  // Step 1 — send OTP code to email (no redirect link)
-  async function handleSendOtp(e: React.FormEvent) {
-    e.preventDefault()
-    if (!email.trim()) return
+  function reset() {
+    setStage('input')
+    setOtp(['', '', '', '', '', ''])
+    setError(null)
+  }
 
+  // Format phone to E.164 — assumes US if no country code
+  function formatPhone(raw: string) {
+    const digits = raw.replace(/\D/g, '')
+    if (digits.startsWith('1') && digits.length === 11) return `+${digits}`
+    if (digits.length === 10) return `+1${digits}`
+    return `+${digits}`
+  }
+
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault()
+    if (!contact.trim()) return
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: { shouldCreateUser: true },
-    })
+    let err
+    if (method === 'email') {
+      ;({ error: err } = await supabase.auth.signInWithOtp({
+        email: contact.trim(),
+        options: { shouldCreateUser: true },
+      }))
+    } else {
+      ;({ error: err } = await supabase.auth.signInWithOtp({
+        phone: formatPhone(contact),
+        options: { shouldCreateUser: true },
+      }))
+    }
 
     setLoading(false)
-
-    if (error) {
-      setError(error.message)
+    if (err) {
+      setError(err.message)
     } else {
       setStage('otp')
     }
   }
 
-  // Step 2 — verify the 6-digit code
-  async function handleVerifyOtp(code: string) {
+  async function handleVerify(code: string) {
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: code,
-      type: 'email',
-    })
+    let err
+    if (method === 'email') {
+      ;({ error: err } = await supabase.auth.verifyOtp({
+        email: contact.trim(),
+        token: code,
+        type: 'email',
+      }))
+    } else {
+      ;({ error: err } = await supabase.auth.verifyOtp({
+        phone: formatPhone(contact),
+        token: code,
+        type: 'sms',
+      }))
+    }
 
     setLoading(false)
-
-    if (error) {
-      setError('Invalid code. Check your email and try again.')
+    if (err) {
+      setError('Invalid code — check your ' + (method === 'email' ? 'email' : 'messages') + ' and try again.')
       setOtp(['', '', '', '', '', ''])
       inputRefs.current[0]?.focus()
     } else {
@@ -61,21 +91,15 @@ export default function LoginPage() {
     }
   }
 
-  // Handle each digit input
   function handleDigit(index: number, value: string) {
     const digit = value.replace(/\D/g, '').slice(-1)
     const next = [...otp]
     next[index] = digit
     setOtp(next)
-
-    if (digit && index < 5) {
-      inputRefs.current[index + 1]?.focus()
-    }
-
-    // Auto-submit when all 6 digits are filled
+    if (digit && index < 5) inputRefs.current[index + 1]?.focus()
     if (digit && index === 5) {
-      const code = [...next].join('')
-      if (code.length === 6) handleVerifyOtp(code)
+      const code = next.join('')
+      if (code.length === 6) handleVerify(code)
     }
   }
 
@@ -85,12 +109,11 @@ export default function LoginPage() {
     }
   }
 
-  // Handle paste of full code
   function handlePaste(e: React.ClipboardEvent) {
     const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
     if (text.length === 6) {
       setOtp(text.split(''))
-      handleVerifyOtp(text)
+      handleVerify(text)
     }
   }
 
@@ -109,60 +132,102 @@ export default function LoginPage() {
         </p>
       </div>
 
-      {/* Form */}
       <div className="w-full max-w-sm animate-slide-up">
-        {stage === 'email' ? (
-          <form onSubmit={handleSendOtp} className="space-y-4">
+        {stage === 'input' ? (
+          <form onSubmit={handleSend} className="space-y-4">
+            {/* Method toggle */}
+            <div className="flex bg-bg-elevated rounded-xl p-1 border border-border">
+              <button
+                type="button"
+                onClick={() => { setMethod('email'); setContact(''); setError(null) }}
+                className={`flex-1 py-2 text-sm rounded-lg transition-colors font-medium ${
+                  method === 'email'
+                    ? 'bg-bg-card text-cream shadow-sm'
+                    : 'text-text-secondary'
+                }`}
+              >
+                Email
+              </button>
+              <button
+                type="button"
+                onClick={() => { setMethod('phone'); setContact(''); setError(null) }}
+                className={`flex-1 py-2 text-sm rounded-lg transition-colors font-medium ${
+                  method === 'phone'
+                    ? 'bg-bg-card text-cream shadow-sm'
+                    : 'text-text-secondary'
+                }`}
+              >
+                Phone
+              </button>
+            </div>
+
+            {/* Input */}
             <div>
-              <label htmlFor="email" className="label mb-2 block">
-                Email address
+              <label htmlFor="contact" className="label mb-2 block">
+                {method === 'email' ? 'Email address' : 'Phone number'}
               </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="input text-base"
-                autoComplete="email"
-                autoCapitalize="none"
-                inputMode="email"
-                required
-              />
+              {method === 'email' ? (
+                <input
+                  id="contact"
+                  type="email"
+                  value={contact}
+                  onChange={(e) => setContact(e.target.value)}
+                  placeholder="you@example.com"
+                  className="input text-base"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  inputMode="email"
+                  required
+                />
+              ) : (
+                <input
+                  id="contact"
+                  type="tel"
+                  value={contact}
+                  onChange={(e) => setContact(e.target.value)}
+                  placeholder="+1 (555) 000-0000"
+                  className="input text-base"
+                  autoComplete="tel"
+                  inputMode="tel"
+                  required
+                />
+              )}
             </div>
 
             {error && <p className="text-red-400 text-sm">{error}</p>}
 
             <button
               type="submit"
-              disabled={loading || !email.trim()}
+              disabled={loading || !contact.trim()}
               className="btn-primary w-full text-center flex items-center justify-center gap-2"
             >
               {loading ? (
                 <span className="animate-pulse-soft">Sending code…</span>
               ) : (
-                'Send sign-in code'
+                `Send sign-in code`
               )}
             </button>
 
             <p className="text-text-tertiary text-xs text-center pt-2 leading-relaxed">
-              We'll email you a 6-digit code — no password needed.
-              Your wine history is private and belongs only to you.
+              We'll send a 6-digit code — no password needed.
             </p>
           </form>
         ) : (
           <div className="space-y-6">
             <div className="card p-6 text-center">
               <div className="w-12 h-12 rounded-full bg-wine-muted flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">✉️</span>
+                <span className="text-2xl">{method === 'email' ? '✉️' : '💬'}</span>
               </div>
-              <h2 className="text-lg font-medium text-cream mb-1">Check your email</h2>
+              <h2 className="text-lg font-medium text-cream mb-1">
+                {method === 'email' ? 'Check your email' : 'Check your messages'}
+              </h2>
               <p className="text-text-secondary text-sm">
-                We sent a 6-digit code to <strong className="text-cream">{email}</strong>
+                We sent a 6-digit code to{' '}
+                <strong className="text-cream">{contact}</strong>
               </p>
             </div>
 
-            {/* OTP digit inputs */}
+            {/* OTP inputs */}
             <div className="flex gap-2 justify-center" onPaste={handlePaste}>
               {otp.map((digit, i) => (
                 <input
@@ -181,18 +246,15 @@ export default function LoginPage() {
             </div>
 
             {error && <p className="text-red-400 text-sm text-center">{error}</p>}
-
             {loading && (
-              <p className="text-text-secondary text-sm text-center animate-pulse-soft">
-                Verifying…
-              </p>
+              <p className="text-text-secondary text-sm text-center animate-pulse-soft">Verifying…</p>
             )}
 
             <button
-              onClick={() => { setStage('email'); setError(null); setOtp(['', '', '', '', '', '']) }}
+              onClick={reset}
               className="w-full text-sm text-text-secondary underline text-center"
             >
-              Use a different email
+              Try a different {method === 'email' ? 'email' : 'number'}
             </button>
           </div>
         )}
