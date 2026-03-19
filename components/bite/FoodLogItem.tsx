@@ -1,10 +1,8 @@
 'use client'
 
-'use client'
-
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Trash2, ChevronDown } from 'lucide-react'
+import { Trash2, ChevronDown, RotateCcw } from 'lucide-react'
 import { MealEntry, MealAnalysisItem } from '@/lib/types/nutrition'
 import { deleteMealEntry } from '@/lib/actions/nutrition'
 
@@ -25,37 +23,89 @@ export default function FoodLogItem({ entry }: FoodLogItemProps) {
   const router = useRouter()
   const [expanded, setExpanded] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState(false)
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const breakdown = parseBreakdown(entry.notes)
 
-  async function handleDelete() {
+  function startDelete() {
+    setPendingDelete(true)
+    undoTimerRef.current = setTimeout(() => {
+      confirmDelete()
+    }, 3000)
+  }
+
+  function undoDelete() {
+    setPendingDelete(false)
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current)
+      undoTimerRef.current = null
+    }
+  }
+
+  async function confirmDelete() {
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current)
+      undoTimerRef.current = null
+    }
     setDeleting(true)
     try {
       await deleteMealEntry(entry.id)
       router.refresh()
     } catch {
       setDeleting(false)
+      setPendingDelete(false)
     }
+  }
+
+  // Pending delete state — shows undo bar
+  if (pendingDelete) {
+    return (
+      <div className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-red-50 border border-red-100 mx-1 my-0.5">
+        <span className="text-sm text-red-600 font-medium">
+          {deleting ? 'Removing…' : 'Removed'}
+        </span>
+        {!deleting && (
+          <button
+            onClick={undoDelete}
+            className="flex items-center gap-1 text-xs font-semibold text-red-600 active:scale-95 transition-transform"
+          >
+            <RotateCcw className="w-3 h-3" />
+            Undo
+          </button>
+        )}
+      </div>
+    )
   }
 
   return (
     <div className="group">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between py-2.5 px-3 rounded-xl active:bg-surface-elevated transition-colors text-left"
-      >
-        <div className="flex-1 min-w-0">
-          <p className="text-ink text-sm font-medium truncate">{entry.name}</p>
-          <p className="text-ink-tertiary text-xs mt-0.5">
-            {breakdown ? `${breakdown.length} items` : (entry.serving_description ?? `${entry.quantity}×`)}
-          </p>
-        </div>
-        <div className="flex items-center gap-3 ml-2 flex-shrink-0">
-          <span className="text-ink text-sm font-semibold">{entry.calories}</span>
-          <span className="text-ink-tertiary text-xs">kcal</span>
-          <ChevronDown className={`w-4 h-4 text-ink-tertiary transition-transform ${expanded ? 'rotate-180' : ''}`} />
-        </div>
-      </button>
+      <div className="flex items-center">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex-1 flex items-center justify-between py-2.5 px-3 rounded-xl active:bg-surface-elevated transition-colors text-left min-w-0"
+        >
+          <div className="flex-1 min-w-0">
+            <p className="text-ink text-sm font-medium truncate">{entry.name}</p>
+            <p className="text-ink-tertiary text-xs mt-0.5">
+              {breakdown ? `${breakdown.length} items` : (entry.serving_description ?? `${entry.quantity}×`)}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+            <span className="text-ink text-sm font-semibold">{entry.calories}</span>
+            <span className="text-ink-tertiary text-[10px]">kcal</span>
+            <ChevronDown className={`w-3.5 h-3.5 text-ink-tertiary transition-transform ${expanded ? 'rotate-180' : ''}`} />
+          </div>
+        </button>
+
+        {/* Always-visible delete button */}
+        <button
+          onClick={startDelete}
+          className="w-8 h-8 flex items-center justify-center rounded-full text-ink-tertiary hover:text-red-400 active:scale-90 transition-all flex-shrink-0 mr-1"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
 
       {expanded && (
         <div className="mx-3 mb-2 bg-surface-elevated rounded-xl p-3 space-y-2">
@@ -103,15 +153,6 @@ export default function FoodLogItem({ entry }: FoodLogItemProps) {
               ))}
             </div>
           )}
-
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            className="flex items-center gap-1.5 text-red-500 text-xs font-medium active:scale-95 transition-transform disabled:opacity-40"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            {deleting ? 'Removing…' : 'Remove'}
-          </button>
         </div>
       )}
     </div>

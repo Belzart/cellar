@@ -25,7 +25,7 @@ export default function MacroRing({ consumed, goal, size = 160 }: MacroRingProps
           r={radius}
           fill="none"
           stroke="#E8E5DE"
-          strokeWidth={8}
+          strokeWidth={7}
         />
         {/* Progress */}
         <circle
@@ -34,7 +34,7 @@ export default function MacroRing({ consumed, goal, size = 160 }: MacroRingProps
           r={radius}
           fill="none"
           stroke={over ? '#F59E0B' : '#10B981'}
-          strokeWidth={8}
+          strokeWidth={7}
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
@@ -42,16 +42,13 @@ export default function MacroRing({ consumed, goal, size = 160 }: MacroRingProps
         />
       </svg>
 
-      {/* Center text — positioned absolutely relative to the ring */}
+      {/* Center text */}
       <div className="absolute flex flex-col items-center justify-center" style={{ width: size, height: size }}>
-        <span className="text-3xl font-bold text-ink leading-none">
+        <span className="text-2xl font-semibold text-ink leading-none tracking-tight">
           {over ? consumed : remaining}
         </span>
-        <span className="text-xs text-ink-secondary mt-1">
-          {over ? 'over goal' : 'remaining'}
-        </span>
-        <span className="text-[11px] text-ink-tertiary mt-0.5">
-          {consumed} / {goal} kcal
+        <span className="text-[10px] text-ink-tertiary mt-0.5 font-medium tracking-wide">
+          {over ? 'over' : 'left'}
         </span>
       </div>
     </div>
