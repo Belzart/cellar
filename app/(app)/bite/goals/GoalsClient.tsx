@@ -46,7 +46,10 @@ const GOALS_LIST = [
 
 interface RecsResult {
   calories: number
-  protein_g: number
+  protein_min: number
+  protein_max: number
+  protein_g: number   // suggested midpoint
+  protein_note: string
   carbs_g: number
   fat_g: number
 }
@@ -100,7 +103,8 @@ export default function GoalsClient({ initialGoals }: GoalsClientProps) {
 
   function calculateRecs() {
     const ageN = parseInt(age)
-    const weightKg = parseFloat(weightLbs) * 0.453592
+    const wLbs = parseFloat(weightLbs)
+    const weightKg = wLbs * 0.453592
     const heightCm = (parseInt(heightFt || '0') * 12 + parseFloat(heightIn || '0')) * 2.54
 
     if (!ageN || !weightKg || !heightCm) return
@@ -110,17 +114,34 @@ export default function GoalsClient({ initialGoals }: GoalsClientProps) {
       ? 10 * weightKg + 6.25 * heightCm - 5 * ageN + 5
       : 10 * weightKg + 6.25 * heightCm - 5 * ageN - 161
 
-    // Apply activity multiplier, then round down slightly to stay conservative
+    // Apply activity multiplier then a 5% conservative buffer
     const tdee = Math.floor(bmr * activity * 0.95)
-
     const goalObj = GOALS_LIST.find((g) => g.value === bodyGoal)!
     const targetCals = Math.round(Math.max(1400, tdee + goalObj.adj))
 
-    const protein_g = Math.round((targetCals * goalObj.protein) / 4)
-    const carbs_g   = Math.round((targetCals * goalObj.carbs)   / 4)
-    const fat_g     = Math.round((targetCals * goalObj.fat)     / 9)
+    // ── Protein: body-weight based ranges (more reliable than % of calories) ──
+    // Science basis: 1.6–2.2 g/kg is the evidence-backed range for most goals.
+    // We convert to g/lb and show a range, not a single fake-precise number.
+    const proteinConfig: Record<string, { minPerLb: number; maxPerLb: number; note: string }> = {
+      lose:     { minPerLb: 0.73, maxPerLb: 0.90, note: 'Higher protein helps preserve muscle in a deficit. Spread it across meals.' },
+      maintain: { minPerLb: 0.55, maxPerLb: 0.75, note: 'Moderate protein is enough for most people at maintenance.' },
+      build:    { minPerLb: 0.73, maxPerLb: 0.90, note: 'Consistent protein supports muscle synthesis. Timing matters less than total daily intake.' },
+      recomp:   { minPerLb: 0.80, maxPerLb: 1.00, note: 'Recomp is slow. High protein and consistency matter more than hitting exact numbers.' },
+    }
+    const pc = proteinConfig[bodyGoal] ?? proteinConfig.maintain
+    const protein_min = Math.round(wLbs * pc.minPerLb)
+    const protein_max = Math.round(wLbs * pc.maxPerLb)
+    const protein_g = Math.round(wLbs * ((pc.minPerLb + pc.maxPerLb) / 2))
 
-    setRecs({ calories: targetCals, protein_g, carbs_g, fat_g })
+    // ── Carbs and fat: fill remaining calories after protein ──
+    const proteinCals = protein_g * 4
+    const remaining = Math.max(0, targetCals - proteinCals)
+    // Fat split by goal: lose/recomp slightly more fat-leaning, build/maintain more carb-leaning
+    const fatFraction = bodyGoal === 'lose' || bodyGoal === 'recomp' ? 0.38 : 0.30
+    const fat_g   = Math.round((remaining * fatFraction) / 9)
+    const carbs_g = Math.round((remaining * (1 - fatFraction)) / 4)
+
+    setRecs({ calories: targetCals, protein_min, protein_max, protein_g, protein_note: pc.note, carbs_g, fat_g })
   }
 
   function applyRecs() {
@@ -383,33 +404,42 @@ export default function GoalsClient({ initialGoals }: GoalsClientProps) {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-bite/10 rounded-xl p-3 text-center col-span-2">
+              <div className="space-y-2">
+                {/* Calories */}
+                <div className="bg-bite/10 rounded-xl p-3 text-center">
                   <p className="text-3xl font-bold text-bite">~{recs.calories}</p>
-                  <p className="text-xs text-ink-tertiary mt-0.5">kcal / day (conservative estimate)</p>
+                  <p className="text-xs text-ink-tertiary mt-0.5">kcal / day</p>
                 </div>
-                <div className="bg-surface-elevated rounded-xl p-3 text-center">
-                  <p className="text-xl font-bold text-ink">~{recs.protein_g}g</p>
-                  <p className="text-xs text-ink-tertiary mt-0.5">protein</p>
+
+                {/* Protein with range */}
+                <div className="bg-surface-elevated rounded-xl p-3">
+                  <div className="flex items-baseline justify-between mb-1">
+                    <span className="text-xs text-ink-tertiary">Protein</span>
+                    <span className="text-lg font-bold text-ink">~{recs.protein_g}g</span>
+                  </div>
+                  <p className="text-xs text-ink-tertiary">
+                    Suggested range: {recs.protein_min}–{recs.protein_max}g/day
+                  </p>
+                  <p className="text-xs text-ink-secondary mt-1 leading-relaxed">{recs.protein_note}</p>
                 </div>
-                <div className="bg-surface-elevated rounded-xl p-3 text-center">
-                  <p className="text-xl font-bold text-ink">~{recs.carbs_g}g</p>
-                  <p className="text-xs text-ink-tertiary mt-0.5">carbs</p>
-                </div>
-                <div className="bg-surface-elevated rounded-xl p-3 text-center">
-                  <p className="text-xl font-bold text-ink">~{recs.fat_g}g</p>
-                  <p className="text-xs text-ink-tertiary mt-0.5">fat</p>
-                </div>
-                <div className="bg-surface-elevated rounded-xl p-3 text-center">
-                  <p className="text-xl font-bold text-ink-secondary">?g</p>
-                  <p className="text-xs text-ink-tertiary mt-0.5">fiber (25–40g)</p>
+
+                {/* Carbs + Fat */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-surface-elevated rounded-xl p-3 text-center">
+                    <p className="text-xl font-bold text-ink">~{recs.carbs_g}g</p>
+                    <p className="text-xs text-ink-tertiary mt-0.5">carbs</p>
+                  </div>
+                  <div className="bg-surface-elevated rounded-xl p-3 text-center">
+                    <p className="text-xl font-bold text-ink">~{recs.fat_g}g</p>
+                    <p className="text-xs text-ink-tertiary mt-0.5">fat</p>
+                  </div>
                 </div>
               </div>
 
               <p className="text-xs text-ink-tertiary leading-relaxed border-t border-surface-border pt-3">
-                Method: Mifflin-St Jeor BMR × {activity}× activity, −5% conservative buffer
-                {bodyGoal === 'lose' ? `, −400 kcal deficit` : bodyGoal === 'build' ? `, +250 kcal surplus` : bodyGoal === 'recomp' ? `, slight deficit` : ``}.
-                Minimum floor: 1,400 kcal.
+                Method: Mifflin-St Jeor BMR × {activity}× activity − 5% buffer
+                {bodyGoal === 'lose' ? `, −400 kcal` : bodyGoal === 'build' ? `, +250 kcal` : bodyGoal === 'recomp' ? `, −150 kcal` : ''}.
+                Protein based on bodyweight, not % of calories.
               </p>
 
               <button

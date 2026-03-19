@@ -119,50 +119,50 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
   async function handleSaveAll() {
     setSaving(true)
     setError(null)
-    try {
-      for (const item of editedItems) {
-        await saveMealEntry({
-          meal_type: mealType,
-          source: textInput ? 'ai_text' : 'ai_photo',
-          raw_input: textInput || undefined,
-          name: item.name,
-          serving_description: item.serving_description,
-          quantity: item.quantity,
-          calories: Math.round(item.calories),
-          protein_g: Number(item.protein_g),
-          carbs_g: Number(item.carbs_g),
-          fat_g: Number(item.fat_g),
-          fiber_g: item.fiber_g != null ? Number(item.fiber_g) : undefined,
-          sugar_g: item.sugar_g != null ? Number(item.sugar_g) : undefined,
-        })
+    for (const item of editedItems) {
+      const result = await saveMealEntry({
+        meal_type: mealType,
+        source: textInput ? 'ai_text' : 'ai_photo',
+        raw_input: textInput || undefined,
+        name: item.name,
+        serving_description: item.serving_description,
+        quantity: item.quantity,
+        calories: Math.round(item.calories),
+        protein_g: Number(item.protein_g),
+        carbs_g: Number(item.carbs_g),
+        fat_g: Number(item.fat_g),
+        fiber_g: item.fiber_g != null ? Number(item.fiber_g) : undefined,
+        sugar_g: item.sugar_g != null ? Number(item.sugar_g) : undefined,
+      })
+      if (result.error) {
+        setError(result.error)
+        setSaving(false)
+        return
       }
-      startNavTransition(() => router.push('/bite'))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed — please try again.')
-      setSaving(false)
     }
+    startNavTransition(() => router.push('/bite'))
   }
 
   async function handleSaveManual() {
     if (!manualName || !manualCals) return
     setSaving(true)
     setError(null)
-    try {
-      await saveMealEntry({
-        meal_type: mealType,
-        source: 'manual',
-        name: manualName,
-        serving_description: manualServing || undefined,
-        calories: parseInt(manualCals) || 0,
-        protein_g: parseFloat(manualProtein) || 0,
-        carbs_g: parseFloat(manualCarbs) || 0,
-        fat_g: parseFloat(manualFat) || 0,
-      })
-      startNavTransition(() => router.push('/bite'))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed — please try again.')
+    const result = await saveMealEntry({
+      meal_type: mealType,
+      source: 'manual',
+      name: manualName,
+      serving_description: manualServing || undefined,
+      calories: parseInt(manualCals) || 0,
+      protein_g: parseFloat(manualProtein) || 0,
+      carbs_g: parseFloat(manualCarbs) || 0,
+      fat_g: parseFloat(manualFat) || 0,
+    })
+    if (result.error) {
+      setError(result.error)
       setSaving(false)
+      return
     }
+    startNavTransition(() => router.push('/bite'))
   }
 
   async function handleSaveToLibrary(idx: number) {
