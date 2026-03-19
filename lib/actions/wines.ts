@@ -103,6 +103,34 @@ export async function getMyWines(params?: {
 
   let wines = Array.from(wineMap.values())
 
+  // Sign storage-path image URLs for private bucket display
+  const pathsToSign = wines
+    .filter((w) => w.primary_label_image_url && !w.primary_label_image_url.startsWith('http'))
+    .map((w) => w.primary_label_image_url!)
+
+  if (pathsToSign.length > 0) {
+    const { data: signed } = await supabase.storage
+      .from('cellar-images')
+      .createSignedUrls(pathsToSign, 3600)
+    if (signed) {
+      const urlMap = new Map(signed.map((s) => [s.path, s.signedUrl]))
+      wines = wines.map((w) => ({
+        ...w,
+        signed_image_url: w.primary_label_image_url
+          ? urlMap.get(w.primary_label_image_url) ?? undefined
+          : undefined,
+      }))
+    }
+  } else {
+    // primary_label_image_url is already a full URL or empty
+    wines = wines.map((w) => ({
+      ...w,
+      signed_image_url: w.primary_label_image_url?.startsWith('http')
+        ? w.primary_label_image_url
+        : undefined,
+    }))
+  }
+
   // Client-side filtering
   if (params?.search) {
     const q = params.search.toLowerCase()

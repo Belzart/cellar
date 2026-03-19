@@ -25,6 +25,17 @@ export async function saveTasting(
       vintage: input.vintage ?? input.extracted.vintage,
     })
 
+  // If we have an uploaded image, fetch its storage path to store on the wine
+  let labelStoragePath: string | undefined
+  if (input.uploaded_image_id) {
+    const { data: imgRow } = await supabase
+      .from('uploaded_images')
+      .select('storage_path')
+      .eq('id', input.uploaded_image_id)
+      .single()
+    labelStoragePath = imgRow?.storage_path
+  }
+
   // Create or find the wine record
   const wine = await createOrFindWine({
     canonical_name,
@@ -37,9 +48,7 @@ export async function saveTasting(
     varietal: input.varietal ?? input.extracted.varietal,
     blend_components: input.extracted.blend_components,
     style: input.style ?? input.extracted.style,
-    label_image_url: input.uploaded_image_id
-      ? undefined // will be updated after signed URL fetch
-      : undefined,
+    label_image_url: labelStoragePath,
   })
 
   // Derive numeric rating from overall_reaction for backward compat
@@ -148,12 +157,36 @@ export async function getRecentTastings(limit = 10): Promise<TastingWithWine[]> 
 
   if (!data) return []
 
+  // Sign storage-path image URLs
+  const pathsToSign = data
+    .map((row) => {
+      const w = (row as Record<string, unknown>).wines as { primary_label_image_url?: string }
+      return w?.primary_label_image_url
+    })
+    .filter((p): p is string => !!p && !p.startsWith('http'))
+
+  const urlMap = new Map<string, string>()
+  if (pathsToSign.length > 0) {
+    const { data: signed } = await supabase.storage
+      .from('cellar-images')
+      .createSignedUrls(pathsToSign, 3600)
+    signed?.forEach((s) => { if (s.signedUrl && s.path) urlMap.set(s.path, s.signedUrl) })
+  }
+
   // Supabase returns the nested relation as `wines` (the table name).
   // Our TastingWithWine type expects `wine` (singular). Remap here.
-  return data.map((row) => ({
-    ...row,
-    wine: (row as Record<string, unknown>).wines as TastingWithWine['wine'],
-  })) as TastingWithWine[]
+  return data.map((row) => {
+    const wineRaw = (row as Record<string, unknown>).wines as TastingWithWine['wine'] & {
+      primary_label_image_url?: string
+    }
+    const signedUrl = wineRaw?.primary_label_image_url?.startsWith('http')
+      ? wineRaw.primary_label_image_url
+      : (wineRaw?.primary_label_image_url ? urlMap.get(wineRaw.primary_label_image_url) : undefined)
+    return {
+      ...row,
+      wine: { ...wineRaw, signed_image_url: signedUrl },
+    }
+  }) as TastingWithWine[]
 }
 
 // ── Recompute and save taste profile ─────────────────────

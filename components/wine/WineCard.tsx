@@ -28,19 +28,22 @@ interface WineCardProps {
 }
 
 export default function WineCard({ wine, variant = 'grid' }: WineCardProps) {
+  // Use pre-signed URL when available, fall back to direct URL (for public or already-signed URLs)
+  const imageUrl = wine.signed_image_url ?? (wine.primary_label_image_url?.startsWith('http') ? wine.primary_label_image_url : null)
+
   if (variant === 'list') {
     return (
       <Link href={`/wine/${wine.id}`} className="block active:opacity-75 transition-opacity">
         <div className="flex items-center gap-4 py-4 px-4 border-b border-border last:border-0">
           {/* Thumbnail */}
           <div className="w-16 h-20 rounded-xl overflow-hidden bg-bg-elevated flex-shrink-0 flex items-center justify-center border border-border">
-            {wine.primary_label_image_url ? (
+            {imageUrl ? (
               <Image
-                src={wine.primary_label_image_url}
+                src={imageUrl}
                 alt={wine.canonical_name}
                 width={64}
                 height={80}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
             ) : (
               <span className="text-2xl">🍷</span>
@@ -92,12 +95,12 @@ export default function WineCard({ wine, variant = 'grid' }: WineCardProps) {
     return (
       <Link href={`/wine/${wine.id}`} className="block">
         <div className="relative rounded-3xl overflow-hidden aspect-[3/4] bg-bg-card border border-border active:scale-95 transition-transform duration-150">
-          {wine.primary_label_image_url ? (
+          {imageUrl ? (
             <Image
-              src={wine.primary_label_image_url}
+              src={imageUrl}
               alt={wine.canonical_name}
               fill
-              className="object-cover"
+              className="object-contain"
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-bg-elevated to-bg-card">
@@ -134,12 +137,12 @@ export default function WineCard({ wine, variant = 'grid' }: WineCardProps) {
       <div className="card active:scale-95 transition-transform duration-150 overflow-hidden">
         {/* Image */}
         <div className="relative w-full aspect-[4/5] bg-bg-elevated flex items-center justify-center">
-          {wine.primary_label_image_url ? (
+          {imageUrl ? (
             <Image
-              src={wine.primary_label_image_url}
+              src={imageUrl}
               alt={wine.canonical_name}
               fill
-              className="object-cover"
+              className="object-contain p-1"
             />
           ) : (
             <span className="text-4xl">🍷</span>

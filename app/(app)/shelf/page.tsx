@@ -9,12 +9,15 @@ import RecommendationCard from '@/components/shelf/RecommendationCard'
 import ScanProgress from '@/components/scan/ScanProgress'
 import EmptyState from '@/components/shared/EmptyState'
 import { RecommendationSessionWithCandidates } from '@/lib/types'
-import { AlertCircle, Store } from 'lucide-react'
+import { AlertCircle, Compass, UtensilsCrossed } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 type ShelfStage = 'select' | 'uploading' | 'extracting' | 'done' | 'error'
+type FindMode = 'shelf' | 'menu'
 
-export default function ShelfPage() {
+export default function FindPage() {
   const [stage, setStage] = useState<ShelfStage>('select')
+  const [mode, setMode] = useState<FindMode>('shelf')
   const [error, setError] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [session, setSession] = useState<RecommendationSessionWithCandidates | null>(null)
@@ -24,14 +27,12 @@ export default function ShelfPage() {
     setError(null)
 
     try {
-      // 1. Upload
       setStage('uploading')
       const formData = new FormData()
       formData.append('file', file)
       formData.append('type', 'shelf')
       const { imageId } = await uploadImage(formData)
 
-      // 2. Analyze
       setStage('extracting')
       const res = await fetch('/api/analyze-shelf', {
         method: 'POST',
@@ -42,7 +43,6 @@ export default function ShelfPage() {
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error ?? 'Analysis failed')
 
-      // 3. Fetch full session with candidates
       const fullSession = await getRecommendationSession(data.sessionId)
       setSession(fullSession)
       setStage('done')
@@ -63,13 +63,46 @@ export default function ShelfPage() {
     <div className="min-h-screen animate-fade-in">
       {/* Header */}
       <header className="px-5 pt-6 pb-4">
-        <h1 className="font-display text-3xl font-medium text-cream tracking-tight">
-          Shelf Picks
-        </h1>
+        <div className="flex items-center gap-2 mb-1">
+          <Compass className="w-5 h-5 text-wine-light" strokeWidth={1.5} />
+          <h1 className="font-display text-3xl font-medium text-cream tracking-tight">Find</h1>
+        </div>
         <p className="text-text-secondary text-sm mt-1">
-          Photograph a wine shelf for personalized recommendations
+          Photograph a shelf or menu to get personalized picks
         </p>
       </header>
+
+      {/* Mode toggle — only shown on select stage */}
+      {stage === 'select' && (
+        <div className="px-4 mb-6">
+          <div className="flex gap-2 bg-bg-elevated rounded-2xl p-1.5 border border-border">
+            <button
+              onClick={() => setMode('shelf')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all duration-150',
+                mode === 'shelf'
+                  ? 'bg-bg-card text-cream shadow-sm border border-border'
+                  : 'text-text-tertiary'
+              )}
+            >
+              <span className="text-base">🏪</span>
+              Wine Store
+            </button>
+            <button
+              onClick={() => setMode('menu')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all duration-150',
+                mode === 'menu'
+                  ? 'bg-bg-card text-cream shadow-sm border border-border'
+                  : 'text-text-tertiary'
+              )}
+            >
+              <UtensilsCrossed className="w-4 h-4" />
+              Restaurant
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Stage: select */}
       {stage === 'select' && (
@@ -78,17 +111,20 @@ export default function ShelfPage() {
           <div className="bg-gold/10 border border-gold/20 rounded-2xl p-4 flex gap-3">
             <span className="text-xl flex-shrink-0">💡</span>
             <div>
-              <p className="text-gold text-sm font-medium">Photo tips</p>
+              <p className="text-gold text-sm font-medium">
+                {mode === 'shelf' ? 'Shelf photo tips' : 'Menu photo tips'}
+              </p>
               <p className="text-gold/70 text-xs mt-1 leading-relaxed">
-                Step back so multiple bottles are visible. Good lighting helps.
-                Labels don't need to be perfect — just readable.
+                {mode === 'shelf'
+                  ? 'Step back so multiple bottles are visible. Good lighting helps. Labels don\'t need to be perfect — just readable.'
+                  : 'Photograph the wine list section clearly. Include as many wines as possible in one shot.'}
               </p>
             </div>
           </div>
 
           <ImageUploader
             onImageSelected={handleImageSelected}
-            label="Photograph a wine store shelf"
+            label={mode === 'shelf' ? 'Photograph a wine shelf' : 'Photograph a wine menu'}
           />
         </div>
       )}
@@ -98,17 +134,14 @@ export default function ShelfPage() {
         <div className="px-4">
           {previewUrl && (
             <div className="relative w-full h-48 rounded-2xl overflow-hidden border border-border mb-6">
-              <Image
-                src={previewUrl}
-                alt="Shelf photo"
-                fill
-                className="object-cover"
-              />
+              <Image src={previewUrl} alt="Photo" fill className="object-cover" />
             </div>
           )}
           <ScanProgress stage={stage === 'uploading' ? 'uploading' : 'extracting'} />
           <p className="text-text-tertiary text-xs text-center mt-4">
-            Identifying bottles and scoring against your palate…
+            {mode === 'shelf'
+              ? 'Identifying bottles and scoring against your palate…'
+              : 'Reading the wine list and finding your best matches…'}
           </p>
         </div>
       )}
@@ -117,73 +150,53 @@ export default function ShelfPage() {
       {stage === 'error' && (
         <div className="px-4">
           <ScanProgress stage="error" error={error} />
-          <button onClick={handleRetry} className="btn-primary w-full py-4 mt-6">
-            Try again
-          </button>
+          <button onClick={handleRetry} className="btn-primary w-full py-4 mt-6">Try again</button>
         </div>
       )}
 
       {/* Results */}
       {stage === 'done' && session && (
         <div className="px-4 space-y-6 pb-8">
-          {/* Shelf image */}
           {previewUrl && (
             <div className="relative w-full h-48 rounded-2xl overflow-hidden border border-border">
-              <Image
-                src={previewUrl}
-                alt="Shelf photo"
-                fill
-                className="object-cover"
-              />
+              <Image src={previewUrl} alt="Photo" fill className="object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-bg-card/60 to-transparent" />
               <div className="absolute bottom-3 left-3">
                 <span className="glass rounded-full px-3 py-1.5 text-xs text-cream border border-border">
-                  {session.candidates.length} bottle{session.candidates.length !== 1 ? 's' : ''} identified
+                  {session.candidates.length} wine{session.candidates.length !== 1 ? 's' : ''} identified
                 </span>
               </div>
             </div>
           )}
 
-          {/* No profile warning */}
           {session.candidates.every((c) => c.recommendation_tier === 'wildcard' && c.palate_score === 0.5) && (
             <div className="bg-gold/10 border border-gold/20 rounded-2xl p-4 flex gap-3">
               <AlertCircle className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
               <p className="text-gold/80 text-sm leading-relaxed">
-                Rate more wines to unlock personalized recommendations.
-                Showing visual matches for now.
+                Rate more wines to unlock personalized recommendations. Showing visual matches for now.
               </p>
             </div>
           )}
 
           {session.candidates.length === 0 ? (
             <EmptyState
-              icon={<Store className="w-8 h-8 text-text-secondary" />}
-              title="No bottles identified"
+              icon={<Compass className="w-8 h-8 text-text-secondary" />}
+              title="No wines identified"
               description="Try a clearer photo with better lighting and more visible labels."
               action={
-                <button onClick={handleRetry} className="btn-primary px-6 py-3">
-                  Try again
-                </button>
+                <button onClick={handleRetry} className="btn-primary px-6 py-3">Try again</button>
               }
             />
           ) : (
             <div className="space-y-3">
               {session.candidates.map((candidate, i) => (
-                <RecommendationCard
-                  key={candidate.id}
-                  candidate={candidate}
-                  rank={i}
-                />
+                <RecommendationCard key={candidate.id} candidate={candidate} rank={i} />
               ))}
             </div>
           )}
 
-          {/* Scan another */}
-          <button
-            onClick={handleRetry}
-            className="btn-secondary w-full py-4"
-          >
-            Scan another shelf
+          <button onClick={handleRetry} className="btn-secondary w-full py-4">
+            Scan another {mode === 'shelf' ? 'shelf' : 'menu'}
           </button>
         </div>
       )}

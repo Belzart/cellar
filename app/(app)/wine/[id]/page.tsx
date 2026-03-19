@@ -2,11 +2,14 @@ import { notFound } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { getWineDetail } from '@/lib/actions/wines'
+import { getBottleForWine } from '@/lib/actions/inventory'
 import TastingCard from '@/components/wine/TastingCard'
+import AddToBottlesButton from '@/components/wine/AddToBottlesButton'
+import WineProfileSection from '@/components/wine/WineProfileSection'
 import { createClient } from '@/lib/supabase/server'
 import { STYLE_COLORS, STYLE_LABELS, cn } from '@/lib/utils'
 import { REACTION_LABELS, OverallReaction } from '@/lib/types'
-import { ChevronLeft, Heart, Grape, MapPin, Calendar } from 'lucide-react'
+import { ChevronLeft, Heart } from 'lucide-react'
 
 interface WineDetailPageProps {
   params: Promise<{ id: string }>
@@ -14,7 +17,10 @@ interface WineDetailPageProps {
 
 export default async function WineDetailPage({ params }: WineDetailPageProps) {
   const { id } = await params
-  const wine = await getWineDetail(id)
+  const [wine, bottle] = await Promise.all([
+    getWineDetail(id),
+    getBottleForWine(id),
+  ])
 
   if (!wine) notFound()
 
@@ -49,11 +55,12 @@ export default async function WineDetailPage({ params }: WineDetailPageProps) {
   )
 
   const isFavorite = wine.is_favorite
+  const latestTasting = wine.tastings[0]
 
   return (
     <div className="min-h-screen animate-fade-in">
-      {/* ── Hero Image ── */}
-      <div className="relative w-full h-80 bg-bg-elevated">
+      {/* ── Hero Image — taller, more immersive ── */}
+      <div className="relative w-full h-[42vh] min-h-[280px] max-h-[380px] bg-bg-elevated">
         {labelImageUrl ? (
           <Image
             src={labelImageUrl}
@@ -63,13 +70,13 @@ export default async function WineDetailPage({ params }: WineDetailPageProps) {
             priority
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-8xl">🍷</span>
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-bg-elevated to-bg">
+            <span className="text-[100px] leading-none select-none">🍷</span>
           </div>
         )}
 
-        {/* Gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/40 to-transparent" />
+        {/* Gradient overlay — stronger at bottom for text legibility */}
+        <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/50 to-transparent" />
 
         {/* Back button */}
         <Link
@@ -85,25 +92,32 @@ export default async function WineDetailPage({ params }: WineDetailPageProps) {
             <Heart className="w-5 h-5 fill-wine text-wine" />
           </div>
         )}
-      </div>
 
-      {/* ── Content ── */}
-      <div className="px-5 pb-8 -mt-4 relative z-10 space-y-6">
-        {/* Title block */}
-        <div>
-          {wine.style && (
+        {/* Style badge floated into hero */}
+        {wine.style && (
+          <div className="absolute bottom-4 left-5">
             <span className={cn(
               'text-xs px-2.5 py-1 rounded-full border font-medium',
               STYLE_COLORS[wine.style] ?? STYLE_COLORS.other
             )}>
               {STYLE_LABELS[wine.style]}
             </span>
-          )}
-          <h1 className="font-display text-2xl font-medium text-cream mt-2 leading-tight">
+          </div>
+        )}
+      </div>
+
+      {/* ── Content ── */}
+      <div className="px-5 pb-8 -mt-2 relative z-10 space-y-6">
+        {/* Title block */}
+        <div>
+          <h1 className="font-display text-2xl font-medium text-cream leading-tight">
             {wine.producer ?? wine.canonical_name}
           </h1>
           {wine.wine_name && (
             <p className="text-text-secondary text-base mt-0.5">{wine.wine_name}</p>
+          )}
+          {wine.vintage && (
+            <p className="text-text-tertiary text-sm mt-1">{wine.vintage}</p>
           )}
 
           {/* Tasting summary */}
@@ -113,9 +127,8 @@ export default async function WineDetailPage({ params }: WineDetailPageProps) {
                 {wine.tasting_count} tasting{wine.tasting_count !== 1 ? 's' : ''}
               </span>
             )}
-            {/* Show most recent reaction if available */}
             {(() => {
-              const latestReaction = wine.tastings[0]?.overall_reaction as OverallReaction | null
+              const latestReaction = latestTasting?.overall_reaction as OverallReaction | null
               if (!latestReaction) return null
               return (
                 <span className="text-text-secondary text-sm">
@@ -126,64 +139,21 @@ export default async function WineDetailPage({ params }: WineDetailPageProps) {
           </div>
         </div>
 
-        {/* ── Wine Metadata ── */}
-        <div className="card p-4 space-y-3">
-          <h2 className="label">Wine Details</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {wine.vintage && (
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-text-secondary flex-shrink-0" />
-                <div>
-                  <p className="text-text-tertiary text-xs">Vintage</p>
-                  <p className="text-cream text-sm font-medium">{wine.vintage}</p>
-                </div>
-              </div>
-            )}
-            {wine.varietal && (
-              <div className="flex items-center gap-2">
-                <Grape className="w-4 h-4 text-text-secondary flex-shrink-0" />
-                <div>
-                  <p className="text-text-tertiary text-xs">Varietal</p>
-                  <p className="text-cream text-sm font-medium">{wine.varietal}</p>
-                </div>
-              </div>
-            )}
-            {(wine.region || wine.country) && (
-              <div className="flex items-center gap-2 col-span-2">
-                <MapPin className="w-4 h-4 text-text-secondary flex-shrink-0" />
-                <div>
-                  <p className="text-text-tertiary text-xs">Origin</p>
-                  <p className="text-cream text-sm font-medium">
-                    {[wine.appellation, wine.region, wine.country].filter(Boolean).join(', ')}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
+        {/* ── My Bottles row ── */}
+        <AddToBottlesButton
+          wineId={wine.id}
+          wineName={wine.producer ?? wine.canonical_name}
+          currentBottle={bottle}
+        />
 
-          {wine.blend_components?.length > 0 && (
-            <div>
-              <p className="text-text-tertiary text-xs mb-2">Blend</p>
-              <div className="flex flex-wrap gap-1.5">
-                {wine.blend_components.map((c, i) => (
-                  <span key={i} className="text-xs px-2 py-1 bg-bg-elevated rounded-full border border-border text-text-secondary">
-                    {c.varietal}{c.percentage ? ` ${c.percentage}%` : ''}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        {/* ── Editorial Wine Profile ── */}
+        <WineProfileSection wine={wine} latestTasting={latestTasting} />
 
         {/* ── Tasting History ── */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display text-lg font-medium text-cream">
-              My Tastings
-            </h2>
-            <Link href="/scan" className="text-wine-light text-sm">
-              + Add tasting
-            </Link>
+            <h2 className="font-display text-lg font-medium text-cream">My Tastings</h2>
+            <Link href="/scan" className="text-wine-light text-sm">+ Add tasting</Link>
           </div>
 
           {tastingsWithImages.length === 0 ? (

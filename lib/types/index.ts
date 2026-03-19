@@ -60,9 +60,29 @@ export interface BlendComponent {
 
 export interface UserProfile {
   id: string
+  email: string | null
   display_name: string | null
+  cellar_name: string | null   // e.g. "Ryan's Cellar", defaults to "My Cellar" in UI
   created_at: string
   updated_at: string
+}
+
+export interface CellarInventory {
+  id: string
+  user_id: string
+  wine_id: string
+  quantity: number
+  purchase_date: string | null
+  purchase_price_cents: number | null
+  purchase_currency: string
+  storage_note: string | null
+  added_at: string
+  updated_at: string
+}
+
+export interface CellarInventoryWithWine extends CellarInventory {
+  wine: Wine
+  signed_image_url?: string
 }
 
 export interface Wine {
@@ -266,6 +286,8 @@ export interface WineWithTastings extends Wine {
   avg_rating: number | null
   last_tasted_at: string | null
   is_favorite: boolean
+  signed_image_url?: string   // pre-signed for display in cards
+  inventory?: CellarInventory // if in My Bottles
 }
 
 export interface RecommendationSessionWithCandidates extends RecommendationSession {

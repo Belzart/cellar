@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, BookOpen, Camera, Sparkles, Store } from 'lucide-react'
+import { Home, BookOpen, Camera, Sparkles, Compass } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const tabs = [
@@ -10,7 +10,7 @@ const tabs = [
   { href: '/collection', icon: BookOpen, label: 'Collection' },
   { href: '/scan',       icon: Camera,   label: 'Scan',       center: true },
   { href: '/profile',    icon: Sparkles, label: 'Palate'     },
-  { href: '/shelf',      icon: Store,    label: 'Shelf'      },
+  { href: '/shelf',      icon: Compass,  label: 'Find'       },
 ]
 
 export default function TabBar() {
