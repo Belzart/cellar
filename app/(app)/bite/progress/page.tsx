@@ -54,7 +54,7 @@ export default async function ProgressPage() {
   return (
     <div
       className="min-h-screen pb-[calc(64px+env(safe-area-inset-bottom)+16px)]"
-      style={{ background: '#F0EDE8' }}
+      style={{ background: '#EFECE6' }}
     >
       <header className="flex items-center gap-3 px-5 pt-[calc(env(safe-area-inset-top)+16px)] pb-4">
         <Link

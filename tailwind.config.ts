@@ -50,10 +50,10 @@ const config: Config = {
         },
         // Bite surface / light-mode backgrounds
         surface: {
-          DEFAULT: '#F0EDE8',  // warm cream
-          card: '#FAFAF9',
-          elevated: '#EAE6E0',
-          border: '#E2DDD7',
+          DEFAULT: '#EFECE6',  // warm cream page bg
+          card: '#F5F2EC',     // warm off-white cards
+          elevated: '#E8E4DC', // slightly deeper elevated
+          border: '#DDD8CE',   // warm neutral border
         },
         ink: {
           DEFAULT: '#0F0F0F',

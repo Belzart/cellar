@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, ChevronDown } from 'lucide-react'
 import { MealEntry } from '@/lib/types/nutrition'
@@ -13,13 +13,16 @@ interface FoodLogItemProps {
 export default function FoodLogItem({ entry }: FoodLogItemProps) {
   const router = useRouter()
   const [expanded, setExpanded] = useState(false)
-  const [isPending, startTransition] = useTransition()
+  const [deleting, setDeleting] = useState(false)
 
-  function handleDelete() {
-    startTransition(async () => {
+  async function handleDelete() {
+    setDeleting(true)
+    try {
       await deleteMealEntry(entry.id)
       router.refresh()
-    })
+    } catch {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -43,7 +46,6 @@ export default function FoodLogItem({ entry }: FoodLogItemProps) {
 
       {expanded && (
         <div className="mx-3 mb-2 bg-surface-elevated rounded-xl p-3 space-y-2">
-          {/* Macro breakdown */}
           <div className="flex gap-4 text-xs">
             <div className="text-center">
               <p className="font-semibold text-ink">{Math.round(Number(entry.protein_g))}g</p>
@@ -67,11 +69,11 @@ export default function FoodLogItem({ entry }: FoodLogItemProps) {
 
           <button
             onClick={handleDelete}
-            disabled={isPending}
+            disabled={deleting}
             className="flex items-center gap-1.5 text-red-500 text-xs font-medium active:scale-95 transition-transform disabled:opacity-40"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            {isPending ? 'Removing…' : 'Remove'}
+            {deleting ? 'Removing…' : 'Remove'}
           </button>
         </div>
       )}

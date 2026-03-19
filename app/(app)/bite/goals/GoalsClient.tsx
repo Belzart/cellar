@@ -31,16 +31,17 @@ const GOAL_FIELDS: GoalField[] = [
 ]
 
 const ACTIVITY_LEVELS = [
-  { value: 1.2,   label: 'Sedentary',       sub: 'Little or no exercise' },
-  { value: 1.375, label: 'Lightly active',  sub: '1–3 days/week' },
-  { value: 1.55,  label: 'Moderately active', sub: '3–5 days/week' },
-  { value: 1.725, label: 'Very active',     sub: '6–7 days/week' },
+  { value: 1.2,   label: 'Sedentary',         sub: 'Desk job, little movement' },
+  { value: 1.375, label: 'Lightly active',    sub: 'Walk daily, light exercise' },
+  { value: 1.55,  label: 'Moderately active', sub: 'Exercise 3–5×/week' },
+  { value: 1.725, label: 'Very active',       sub: 'Hard training 6–7×/week' },
 ]
 
 const GOALS_LIST = [
-  { value: 'lose',     label: 'Lose weight',   adj: -500,  protein: 0.40, carbs: 0.35, fat: 0.25 },
+  { value: 'lose',     label: 'Lose fat',      adj: -400,  protein: 0.38, carbs: 0.34, fat: 0.28 },
   { value: 'maintain', label: 'Maintain',      adj: 0,     protein: 0.30, carbs: 0.45, fat: 0.25 },
-  { value: 'build',    label: 'Build muscle',  adj: 300,   protein: 0.35, carbs: 0.45, fat: 0.20 },
+  { value: 'recomp',   label: 'Recomp',        adj: -150,  protein: 0.40, carbs: 0.35, fat: 0.25 },
+  { value: 'build',    label: 'Build muscle',  adj: 250,   protein: 0.35, carbs: 0.44, fat: 0.21 },
 ]
 
 interface RecsResult {
@@ -72,7 +73,7 @@ export default function GoalsClient({ initialGoals }: GoalsClientProps) {
   const [weightLbs, setWeightLbs] = useState('')
   const [heightFt, setHeightFt] = useState('')
   const [heightIn, setHeightIn] = useState('')
-  const [activity, setActivity] = useState(1.55)
+  const [activity, setActivity] = useState(1.375) // default: lightly active (conservative)
   const [bodyGoal, setBodyGoal] = useState('maintain')
   const [recs, setRecs] = useState<RecsResult | null>(null)
 
@@ -104,14 +105,16 @@ export default function GoalsClient({ initialGoals }: GoalsClientProps) {
 
     if (!ageN || !weightKg || !heightCm) return
 
-    // Mifflin-St Jeor BMR
+    // Mifflin-St Jeor BMR — a reasonable starting estimate, not a precise measurement
     const bmr = sex === 'male'
       ? 10 * weightKg + 6.25 * heightCm - 5 * ageN + 5
       : 10 * weightKg + 6.25 * heightCm - 5 * ageN - 161
 
-    const tdee = bmr * activity
+    // Apply activity multiplier, then round down slightly to stay conservative
+    const tdee = Math.floor(bmr * activity * 0.95)
+
     const goalObj = GOALS_LIST.find((g) => g.value === bodyGoal)!
-    const targetCals = Math.round(Math.max(1200, tdee + goalObj.adj))
+    const targetCals = Math.round(Math.max(1400, tdee + goalObj.adj))
 
     const protein_g = Math.round((targetCals * goalObj.protein) / 4)
     const carbs_g   = Math.round((targetCals * goalObj.carbs)   / 4)
@@ -338,13 +341,13 @@ export default function GoalsClient({ initialGoals }: GoalsClientProps) {
             {/* Goal */}
             <div>
               <p className="text-xs text-ink-tertiary mb-2">Your goal</p>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {GOALS_LIST.map((g) => (
                   <button
                     key={g.value}
                     onClick={() => setBodyGoal(g.value)}
                     className={cn(
-                      'flex-1 py-2 rounded-xl text-xs font-semibold border transition-all',
+                      'py-2 px-3 rounded-xl text-xs font-semibold border transition-all text-left',
                       bodyGoal === g.value
                         ? 'bg-ink text-surface-card border-ink'
                         : 'bg-surface-elevated text-ink-secondary border-surface-border'
@@ -373,37 +376,47 @@ export default function GoalsClient({ initialGoals }: GoalsClientProps) {
           {/* Results */}
           {recs && (
             <div className="bg-surface-card rounded-2xl p-4 shadow-bite-card space-y-4 animate-fade-in">
-              <p className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">Your targets</p>
+              <div>
+                <p className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">Estimated starting point</p>
+                <p className="text-xs text-ink-tertiary mt-1 leading-relaxed">
+                  These are rough estimates — individual metabolism varies by 15–25%. Treat this as a starting point, not a prescription. Adjust based on how you actually feel and perform.
+                </p>
+              </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-bite/10 rounded-xl p-3 text-center">
-                  <p className="text-2xl font-bold text-bite">{recs.calories}</p>
-                  <p className="text-xs text-ink-tertiary mt-0.5">kcal / day</p>
+                <div className="bg-bite/10 rounded-xl p-3 text-center col-span-2">
+                  <p className="text-3xl font-bold text-bite">~{recs.calories}</p>
+                  <p className="text-xs text-ink-tertiary mt-0.5">kcal / day (conservative estimate)</p>
                 </div>
                 <div className="bg-surface-elevated rounded-xl p-3 text-center">
-                  <p className="text-2xl font-bold text-ink">{recs.protein_g}g</p>
+                  <p className="text-xl font-bold text-ink">~{recs.protein_g}g</p>
                   <p className="text-xs text-ink-tertiary mt-0.5">protein</p>
                 </div>
                 <div className="bg-surface-elevated rounded-xl p-3 text-center">
-                  <p className="text-2xl font-bold text-ink">{recs.carbs_g}g</p>
+                  <p className="text-xl font-bold text-ink">~{recs.carbs_g}g</p>
                   <p className="text-xs text-ink-tertiary mt-0.5">carbs</p>
                 </div>
                 <div className="bg-surface-elevated rounded-xl p-3 text-center">
-                  <p className="text-2xl font-bold text-ink">{recs.fat_g}g</p>
+                  <p className="text-xl font-bold text-ink">~{recs.fat_g}g</p>
                   <p className="text-xs text-ink-tertiary mt-0.5">fat</p>
+                </div>
+                <div className="bg-surface-elevated rounded-xl p-3 text-center">
+                  <p className="text-xl font-bold text-ink-secondary">?g</p>
+                  <p className="text-xs text-ink-tertiary mt-0.5">fiber (25–40g)</p>
                 </div>
               </div>
 
-              <p className="text-xs text-ink-tertiary leading-relaxed">
-                Based on Mifflin-St Jeor BMR × {activity} activity multiplier
-                {bodyGoal !== 'maintain' && `, ${bodyGoal === 'lose' ? '−500 kcal deficit' : '+300 kcal surplus'}`}.
+              <p className="text-xs text-ink-tertiary leading-relaxed border-t border-surface-border pt-3">
+                Method: Mifflin-St Jeor BMR × {activity}× activity, −5% conservative buffer
+                {bodyGoal === 'lose' ? `, −400 kcal deficit` : bodyGoal === 'build' ? `, +250 kcal surplus` : bodyGoal === 'recomp' ? `, slight deficit` : ``}.
+                Minimum floor: 1,400 kcal.
               </p>
 
               <button
                 onClick={applyRecs}
                 className="w-full py-3 rounded-2xl bg-ink text-surface-card text-sm font-semibold active:scale-95 transition-all"
               >
-                Apply to My Goals
+                Apply as starting goals
               </button>
             </div>
           )}

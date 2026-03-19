@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, Type, Camera, AlertCircle, CheckCircle2, Edit3, BookmarkPlus } from 'lucide-react'
 import Link from 'next/link'
@@ -31,6 +31,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
   const [analyzing, setAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [, startNavTransition] = useTransition()
   const [savedToLibrary, setSavedToLibrary] = useState<Set<number>>(new Set())
 
   // Manual entry state
@@ -127,17 +128,17 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
           name: item.name,
           serving_description: item.serving_description,
           quantity: item.quantity,
-          calories: item.calories,
-          protein_g: item.protein_g,
-          carbs_g: item.carbs_g,
-          fat_g: item.fat_g,
-          fiber_g: item.fiber_g ?? undefined,
-          sugar_g: item.sugar_g ?? undefined,
+          calories: Math.round(item.calories),
+          protein_g: Number(item.protein_g),
+          carbs_g: Number(item.carbs_g),
+          fat_g: Number(item.fat_g),
+          fiber_g: item.fiber_g != null ? Number(item.fiber_g) : undefined,
+          sugar_g: item.sugar_g != null ? Number(item.sugar_g) : undefined,
         })
       }
-      router.push('/bite')
+      startNavTransition(() => router.push('/bite'))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed. Please try again.')
+      setError(e instanceof Error ? e.message : 'Save failed — please try again.')
       setSaving(false)
     }
   }
@@ -157,9 +158,9 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
         carbs_g: parseFloat(manualCarbs) || 0,
         fat_g: parseFloat(manualFat) || 0,
       })
-      router.push('/bite')
+      startNavTransition(() => router.push('/bite'))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed. Please try again.')
+      setError(e instanceof Error ? e.message : 'Save failed — please try again.')
       setSaving(false)
     }
   }

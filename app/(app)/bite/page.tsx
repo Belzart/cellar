@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import Link from 'next/link'
 import { PlusCircle, ChevronRight } from 'lucide-react'
 import { getDaySummary } from '@/lib/actions/nutrition'
@@ -33,7 +35,7 @@ export default async function BiteTodayPage() {
   return (
     <div
       className="min-h-screen pb-[calc(64px+env(safe-area-inset-bottom)+16px)]"
-      style={{ background: '#F0EDE8' }}
+      style={{ background: '#EFECE6' }}
     >
       {/* ── Header ── */}
       <header className="px-5 pt-[calc(env(safe-area-inset-top)+16px)] pb-2 flex items-center justify-between">
