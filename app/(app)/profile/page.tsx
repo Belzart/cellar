@@ -8,7 +8,7 @@ export default async function ProfilePage() {
   const profile = await getLatestProfile()
 
   return (
-    <div className="min-h-screen animate-fade-in pb-8">
+    <div className="min-h-screen animate-fade-in pb-tab-bar">
       {/* Header */}
       <header className="px-5 pt-6 pb-4">
         <h1 className="font-display text-3xl font-medium text-cream tracking-tight">My Palate</h1>

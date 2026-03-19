@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import TabBar from '@/components/layout/TabBar'
+import SmartNavBar from '@/components/layout/SmartNavBar'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -10,13 +10,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-bg flex flex-col">
-      {/* Main content — padded to account for bottom tab bar */}
-      <main className="flex-1 pb-tab-bar pt-safe">
+      {/* Each page manages its own bottom padding via pb-tab-bar or pb-bite-bar */}
+      <main className="flex-1 pt-safe">
         {children}
       </main>
 
-      {/* Persistent bottom navigation */}
-      <TabBar />
+      {/* Smart nav: renders Cellar tab bar, Bite tab bar, or nothing (hub) */}
+      <SmartNavBar />
     </div>
   )
 }

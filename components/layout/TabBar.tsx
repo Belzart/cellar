@@ -6,7 +6,7 @@ import { Home, BookOpen, Camera, Sparkles, Compass } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const tabs = [
-  { href: '/',           icon: Home,     label: 'Home'       },
+  { href: '/cellar',     icon: Home,     label: 'Home'       },
   { href: '/collection', icon: BookOpen, label: 'Collection' },
   { href: '/scan',       icon: Camera,   label: 'Scan',       center: true },
   { href: '/profile',    icon: Sparkles, label: 'Palate'     },
@@ -20,8 +20,8 @@ export default function TabBar() {
     <nav className="tab-bar">
       <div className="flex items-center justify-around h-[72px] px-2">
         {tabs.map((tab) => {
-          const isActive = tab.href === '/'
-            ? pathname === '/'
+          const isActive = tab.href === '/cellar'
+            ? pathname === '/cellar'
             : pathname.startsWith(tab.href)
 
           if (tab.center) {

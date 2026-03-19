@@ -32,7 +32,10 @@
       "Bash(head -5 \"/c/Users/Ryan Belza/Desktop/Wine app/app/\\(auth\\)/login/page.tsx\")",
       "Bash(ls \"/c/Users/Ryan Belza/Desktop/Wine app/app/\\(auth\\)/\")",
       "Bash(node -e \"console.log\\(require\\(''./node_modules/next/package.json''\\).version\\)\")",
-      "Bash(npm view:*)"
+      "Bash(npm view:*)",
+      "Bash(grep -n \"min-h-screen\" app/\\\\\\(app\\\\\\)/scan/page.tsx app/\\\\\\(app\\\\\\)/shelf/page.tsx app/\\\\\\(app\\\\\\)/bottles/page.tsx app/\\\\\\(app\\\\\\)/collection/page.tsx app/\\\\\\(app\\\\\\)/settings/page.tsx app/\\\\\\(app\\\\\\)/profile/page.tsx app/\\\\\\(app\\\\\\)/wine/[id]/page.tsx)",
+      "Bash(sed -i 's/className=\"\"min-h-screen animate-fade-in pb-8\"\"/className=\"\"min-h-screen animate-fade-in pb-tab-bar\"\"/g' app/\\\\\\(app\\\\\\)/bottles/page.tsx app/\\\\\\(app\\\\\\)/settings/page.tsx app/\\\\\\(app\\\\\\)/profile/page.tsx)",
+      "Bash(sed -i 's/className=\"\"min-h-screen animate-fade-in\"\"/className=\"\"min-h-screen animate-fade-in pb-tab-bar\"\"/g' app/\\\\\\(app\\\\\\)/scan/page.tsx app/\\\\\\(app\\\\\\)/shelf/page.tsx app/\\\\\\(app\\\\\\)/collection/page.tsx app/\\\\\\(app\\\\\\)/wine/[id]/page.tsx)"
     ]
   }
 }

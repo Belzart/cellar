@@ -12,7 +12,7 @@ export default async function MyBottlesPage() {
   const bottles = await getMyBottles()
 
   return (
-    <div className="min-h-screen animate-fade-in pb-8">
+    <div className="min-h-screen animate-fade-in pb-tab-bar">
       <header className="px-5 pt-6 pb-4">
         <h1 className="font-display text-3xl font-medium text-cream tracking-tight">My Bottles</h1>
         <p className="text-text-secondary text-sm mt-1">

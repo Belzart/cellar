@@ -7,10 +7,10 @@ export default async function SettingsPage() {
   const profile = await getMyProfile()
 
   return (
-    <div className="min-h-screen animate-fade-in pb-8">
+    <div className="min-h-screen animate-fade-in pb-tab-bar">
       <header className="px-5 pt-6 pb-4 flex items-center gap-3">
         <Link
-          href="/"
+          href="/cellar"
           className="w-9 h-9 rounded-full bg-bg-elevated border border-border flex items-center justify-center"
         >
           <ChevronLeft className="w-4 h-4 text-cream" />

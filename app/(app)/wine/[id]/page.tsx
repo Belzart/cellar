@@ -58,7 +58,7 @@ export default async function WineDetailPage({ params }: WineDetailPageProps) {
   const latestTasting = wine.tastings[0]
 
   return (
-    <div className="min-h-screen animate-fade-in">
+    <div className="min-h-screen animate-fade-in pb-tab-bar">
       {/* ── Hero Image — taller, more immersive ── */}
       <div className="relative w-full h-[42vh] min-h-[280px] max-h-[380px] bg-bg-elevated">
         {labelImageUrl ? (

@@ -60,7 +60,7 @@ export default function FindPage() {
   }
 
   return (
-    <div className="min-h-screen animate-fade-in">
+    <div className="min-h-screen animate-fade-in pb-tab-bar">
       {/* Header */}
       <header className="px-5 pt-6 pb-4">
         <div className="flex items-center gap-2 mb-1">

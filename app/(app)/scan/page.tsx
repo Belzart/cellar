@@ -81,7 +81,7 @@ export default function ScanPage() {
   }
 
   return (
-    <div className="min-h-screen animate-fade-in">
+    <div className="min-h-screen animate-fade-in pb-tab-bar">
       {/* Header */}
       {(stage === 'select' || stage === 'error') && (
         <header className="px-5 pt-6 pb-4">

@@ -49,7 +49,7 @@ export default function CollectionPage() {
   const isFiltered = filters.search || filters.style || filters.favorites || filters.sort !== 'recent'
 
   return (
-    <div className="min-h-screen animate-fade-in">
+    <div className="min-h-screen animate-fade-in pb-tab-bar">
       {/* Header */}
       <header className="px-5 pt-6 pb-2 flex items-end justify-between">
         <div>

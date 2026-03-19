@@ -40,6 +40,26 @@ const config: Config = {
         },
         cream: '#F2EDE6',
         stone: '#78716C',
+        // Bite — nutrition app accent palette (bright, fresh, clean)
+        bite: {
+          DEFAULT: '#10B981',  // emerald-500
+          light: '#34D399',    // emerald-400
+          dark: '#059669',     // emerald-600
+          muted: '#D1FAE5',    // emerald-100
+          subtle: '#ECFDF5',   // emerald-50
+        },
+        // Bite surface / light-mode backgrounds
+        surface: {
+          DEFAULT: '#F7F6F3',  // warm off-white
+          card: '#FFFFFF',
+          elevated: '#F0EEE9',
+          border: '#E8E5DE',
+        },
+        ink: {
+          DEFAULT: '#0F0F0F',
+          secondary: '#4B5563',
+          tertiary: '#9CA3AF',
+        },
       },
       fontFamily: {
         sans: [
@@ -101,6 +121,8 @@ const config: Config = {
         'card-hover': '0 4px 16px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.4)',
         'wine': '0 0 20px rgba(139,26,26,0.3)',
         'glow': '0 0 40px rgba(139,26,26,0.2)',
+        'bite': '0 0 24px rgba(16,185,129,0.25)',
+        'bite-card': '0 2px 16px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04)',
       },
     },
   },
