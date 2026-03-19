@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useTransition } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, Type, Camera, AlertCircle, CheckCircle2, Edit3, BookmarkPlus } from 'lucide-react'
 import Link from 'next/link'
@@ -30,7 +30,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
   const [editedItems, setEditedItems] = useState<MealAnalysisItem[]>([])
   const [analyzing, setAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const [saving, setSaving] = useState(false)
   const [savedToLibrary, setSavedToLibrary] = useState<Set<number>>(new Set())
 
   // Manual entry state
@@ -115,51 +115,53 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
 
   // ── Save entries ─────────────────────────────────────────────
 
-  function handleSaveAll() {
-    startTransition(async () => {
-      try {
-        for (const item of editedItems) {
-          await saveMealEntry({
-            meal_type: mealType,
-            source: textInput ? 'ai_text' : 'ai_photo',
-            raw_input: textInput || undefined,
-            name: item.name,
-            serving_description: item.serving_description,
-            quantity: item.quantity,
-            calories: item.calories,
-            protein_g: item.protein_g,
-            carbs_g: item.carbs_g,
-            fat_g: item.fat_g,
-            fiber_g: item.fiber_g ?? undefined,
-            sugar_g: item.sugar_g ?? undefined,
-          })
-        }
-        router.push('/bite')
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Save failed')
-      }
-    })
-  }
-
-  function handleSaveManual() {
-    if (!manualName || !manualCals) return
-    startTransition(async () => {
-      try {
+  async function handleSaveAll() {
+    setSaving(true)
+    setError(null)
+    try {
+      for (const item of editedItems) {
         await saveMealEntry({
           meal_type: mealType,
-          source: 'manual',
-          name: manualName,
-          serving_description: manualServing || undefined,
-          calories: parseInt(manualCals) || 0,
-          protein_g: parseFloat(manualProtein) || 0,
-          carbs_g: parseFloat(manualCarbs) || 0,
-          fat_g: parseFloat(manualFat) || 0,
+          source: textInput ? 'ai_text' : 'ai_photo',
+          raw_input: textInput || undefined,
+          name: item.name,
+          serving_description: item.serving_description,
+          quantity: item.quantity,
+          calories: item.calories,
+          protein_g: item.protein_g,
+          carbs_g: item.carbs_g,
+          fat_g: item.fat_g,
+          fiber_g: item.fiber_g ?? undefined,
+          sugar_g: item.sugar_g ?? undefined,
         })
-        router.push('/bite')
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Save failed')
       }
-    })
+      router.push('/bite')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed. Please try again.')
+      setSaving(false)
+    }
+  }
+
+  async function handleSaveManual() {
+    if (!manualName || !manualCals) return
+    setSaving(true)
+    setError(null)
+    try {
+      await saveMealEntry({
+        meal_type: mealType,
+        source: 'manual',
+        name: manualName,
+        serving_description: manualServing || undefined,
+        calories: parseInt(manualCals) || 0,
+        protein_g: parseFloat(manualProtein) || 0,
+        carbs_g: parseFloat(manualCarbs) || 0,
+        fat_g: parseFloat(manualFat) || 0,
+      })
+      router.push('/bite')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed. Please try again.')
+      setSaving(false)
+    }
   }
 
   async function handleSaveToLibrary(idx: number) {
@@ -519,10 +521,10 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
 
             <button
               onClick={handleSaveAll}
-              disabled={isPending}
+              disabled={saving}
               className="w-full bg-bite text-white py-4 rounded-2xl text-base font-semibold active:scale-95 transition-all disabled:opacity-50"
             >
-              {isPending ? 'Saving…' : `Add to ${MEAL_TYPE_LABELS[mealType]}`}
+              {saving ? 'Saving…' : `Add to ${MEAL_TYPE_LABELS[mealType]}`}
             </button>
           </div>
         )}
@@ -608,15 +610,15 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
 
             <button
               onClick={handleSaveManual}
-              disabled={!manualName || !manualCals || isPending}
+              disabled={!manualName || !manualCals || saving}
               className={cn(
                 'w-full py-4 rounded-2xl text-base font-semibold transition-all active:scale-95',
-                !manualName || !manualCals || isPending
+                !manualName || !manualCals || saving
                   ? 'bg-surface-elevated text-ink-tertiary'
                   : 'bg-ink text-surface-card'
               )}
             >
-              {isPending ? 'Saving…' : `Add to ${MEAL_TYPE_LABELS[mealType]}`}
+              {saving ? 'Saving…' : `Add to ${MEAL_TYPE_LABELS[mealType]}`}
             </button>
           </div>
         )}

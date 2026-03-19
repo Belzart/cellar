@@ -1,6 +1,6 @@
 'use client'
 
-import { useTransition } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { logWater, removeLastWater } from '@/lib/actions/nutrition'
 
@@ -14,24 +14,38 @@ const MAX_GLASSES = 8
 
 export default function WaterTracker({ consumed_ml, goal_ml }: WaterTrackerProps) {
   const router = useRouter()
-  const [isPending, startTransition] = useTransition()
+  const [optimisticMl, setOptimisticMl] = useState(consumed_ml)
+  const [busy, setBusy] = useState(false)
 
-  const glassesConsumed = Math.min(Math.round(consumed_ml / GLASS_ML), MAX_GLASSES)
+  const glassesConsumed = Math.min(Math.round(optimisticMl / GLASS_ML), MAX_GLASSES)
   const goalGlasses = Math.round(goal_ml / GLASS_ML)
 
-  function addGlass() {
-    startTransition(async () => {
+  async function addGlass() {
+    if (busy) return
+    setBusy(true)
+    setOptimisticMl((prev) => prev + GLASS_ML)
+    try {
       await logWater(GLASS_ML)
       router.refresh()
-    })
+    } catch {
+      setOptimisticMl((prev) => prev - GLASS_ML)
+    } finally {
+      setBusy(false)
+    }
   }
 
-  function removeGlass() {
-    if (consumed_ml <= 0) return
-    startTransition(async () => {
+  async function removeGlass() {
+    if (busy || optimisticMl <= 0) return
+    setBusy(true)
+    setOptimisticMl((prev) => Math.max(0, prev - GLASS_ML))
+    try {
       await removeLastWater()
       router.refresh()
-    })
+    } catch {
+      setOptimisticMl((prev) => prev + GLASS_ML)
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -44,18 +58,17 @@ export default function WaterTracker({ consumed_ml, goal_ml }: WaterTrackerProps
         <div className="flex items-center gap-2">
           <button
             onClick={removeGlass}
-            disabled={isPending || consumed_ml <= 0}
+            disabled={optimisticMl <= 0}
             className="w-7 h-7 rounded-full bg-surface-elevated text-ink-tertiary text-lg font-medium flex items-center justify-center active:scale-90 transition-transform disabled:opacity-30"
           >
             −
           </button>
           <span className="text-xs text-ink-secondary w-20 text-center">
-            {(consumed_ml / 1000).toFixed(1)}L / {(goal_ml / 1000).toFixed(1)}L
+            {(optimisticMl / 1000).toFixed(1)}L / {(goal_ml / 1000).toFixed(1)}L
           </span>
           <button
             onClick={addGlass}
-            disabled={isPending}
-            className="w-7 h-7 rounded-full bg-[#EFF6FF] text-[#3B82F6] text-lg font-medium flex items-center justify-center active:scale-90 transition-transform disabled:opacity-40"
+            className="w-7 h-7 rounded-full bg-[#EFF6FF] text-[#3B82F6] text-lg font-medium flex items-center justify-center active:scale-90 transition-transform"
           >
             +
           </button>

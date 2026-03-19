@@ -15,8 +15,11 @@ export default function MealSection({ mealType, entries }: MealSectionProps) {
 
   return (
     <div className="bg-surface-card rounded-2xl overflow-hidden shadow-bite-card">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-surface-border">
+      {/* Header — full row is tappable */}
+      <Link
+        href={`/bite/log?meal=${mealType}`}
+        className="flex items-center justify-between px-4 py-3 border-b border-surface-border active:bg-surface-elevated transition-colors"
+      >
         <div className="flex items-center gap-2">
           <span className="text-base">{emoji}</span>
           <span className="text-sm font-semibold text-ink">{label}</span>
@@ -24,13 +27,10 @@ export default function MealSection({ mealType, entries }: MealSectionProps) {
             <span className="text-xs text-ink-tertiary ml-1">{totalCals} kcal</span>
           )}
         </div>
-        <Link
-          href={`/bite/log?meal=${mealType}`}
-          className="w-7 h-7 rounded-full bg-bite/10 flex items-center justify-center active:scale-90 transition-transform"
-        >
+        <div className="w-7 h-7 rounded-full bg-bite/10 flex items-center justify-center">
           <Plus className="w-4 h-4 text-bite" />
-        </Link>
-      </div>
+        </div>
+      </Link>
 
       {/* Entries */}
       {entries.length > 0 ? (
@@ -40,9 +40,12 @@ export default function MealSection({ mealType, entries }: MealSectionProps) {
           ))}
         </div>
       ) : (
-        <div className="px-4 py-4">
-          <p className="text-ink-tertiary text-sm">Nothing logged yet</p>
-        </div>
+        <Link
+          href={`/bite/log?meal=${mealType}`}
+          className="block px-4 py-4 active:bg-surface-elevated transition-colors"
+        >
+          <p className="text-ink-tertiary text-sm">Nothing logged yet — tap to add</p>
+        </Link>
       )}
     </div>
   )

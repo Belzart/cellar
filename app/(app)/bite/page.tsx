@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { PlusCircle, ChevronRight, Footprints } from 'lucide-react'
+import { PlusCircle, ChevronRight } from 'lucide-react'
 import { getDaySummary } from '@/lib/actions/nutrition'
 import { groupEntriesByMeal } from '@/lib/nutrition-utils'
 import { MEAL_TYPES } from '@/lib/types/nutrition'
@@ -29,14 +29,11 @@ export default async function BiteTodayPage() {
   const carbsGoal    = goals?.carbs_g_goal ?? 200
   const fatGoal      = goals?.fat_g_goal ?? 65
   const waterGoal    = goals?.water_ml_goal ?? 2500
-  const stepsGoal    = goals?.steps_goal ?? 10000
-
-  const stepsProgress = stepsGoal > 0 ? Math.min(totals.steps / stepsGoal, 1) : 0
 
   return (
     <div
       className="min-h-screen pb-[calc(64px+env(safe-area-inset-bottom)+16px)]"
-      style={{ background: '#F7F6F3' }}
+      style={{ background: '#F0EDE8' }}
     >
       {/* ── Header ── */}
       <header className="px-5 pt-[calc(env(safe-area-inset-top)+16px)] pb-2 flex items-center justify-between">
@@ -119,25 +116,6 @@ export default async function BiteTodayPage() {
 
         {/* ── Water tracker ── */}
         <WaterTracker consumed_ml={totals.water_ml} goal_ml={waterGoal} />
-
-        {/* ── Steps ── */}
-        <div className="bg-surface-card rounded-2xl p-4 shadow-bite-card">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Footprints className="w-4 h-4 text-ink-secondary" />
-              <span className="text-sm font-semibold text-ink">Steps</span>
-            </div>
-            <Link href="/bite/goals" className="text-xs text-bite font-medium">
-              {totals.steps.toLocaleString()} / {stepsGoal.toLocaleString()}
-            </Link>
-          </div>
-          <div className="w-full h-2 bg-surface-elevated rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full bg-[#8B5CF6] transition-all duration-500"
-              style={{ width: `${stepsProgress * 100}%` }}
-            />
-          </div>
-        </div>
 
         {/* ── Meal sections ── */}
         <div>

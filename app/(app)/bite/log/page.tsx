@@ -10,7 +10,7 @@ export default async function LogMealPage({ searchParams }: LogPageProps) {
   return (
     <div
       className="min-h-screen pb-[calc(64px+env(safe-area-inset-bottom))]"
-      style={{ background: '#F7F6F3' }}
+      style={{ background: '#F0EDE8' }}
     >
       <Suspense fallback={null}>
         <LogMealClient initialMealType={meal} />
