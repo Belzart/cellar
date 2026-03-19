@@ -5,6 +5,7 @@ const SYSTEM_PROMPT = `You are a precise nutrition analyst AI. Your job is to es
 
 Return ONLY valid JSON with no extra text, markdown, or code blocks. Use this exact schema:
 {
+  "meal_name": "string (short 2-5 word name for the whole meal, e.g. 'Chicken Rice Bowl', 'Avocado Toast', 'Post-Workout Shake')",
   "items": [
     {
       "name": "string",
@@ -33,7 +34,8 @@ Rules:
 - Be honest: if you can't see portion size in a photo, say so in confidence_notes
 - Do not over-estimate to avoid health risks; be conservative on calorie counts
 - Break multi-component dishes into separate items when possible (e.g., burger: bun + patty + toppings as one item is fine, but separate items for a full plate)
-- Confidence 0.9+ = you can clearly identify everything. 0.7-0.9 = reasonable guess. Below 0.7 = significant uncertainty`
+- Confidence 0.9+ = you can clearly identify everything. 0.7-0.9 = reasonable guess. Below 0.7 = significant uncertainty
+- meal_name should be a clean, short display name (not a sentence)`
 
 export async function POST(req: NextRequest) {
   try {

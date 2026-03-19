@@ -28,6 +28,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [analysisResult, setAnalysisResult] = useState<MealAnalysisResult | null>(null)
   const [editedItems, setEditedItems] = useState<MealAnalysisItem[]>([])
+  const [mealName, setMealName] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -60,6 +61,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
       if (!res.ok) throw new Error(data.error ?? 'Analysis failed')
       setAnalysisResult(data.result)
       setEditedItems(data.result.items)
+      setMealName(data.result.meal_name ?? '')
       setMode('result')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Analysis failed')
@@ -86,6 +88,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
       if (!res.ok) throw new Error(data.error ?? 'Analysis failed')
       setAnalysisResult(data.result)
       setEditedItems(data.result.items)
+      setMealName(data.result.meal_name ?? '')
       setMode('result')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Analysis failed')
@@ -119,26 +122,39 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
   async function handleSaveAll() {
     setSaving(true)
     setError(null)
-    for (const item of editedItems) {
-      const result = await saveMealEntry({
-        meal_type: mealType,
-        source: textInput ? 'ai_text' : 'ai_photo',
-        raw_input: textInput || undefined,
-        name: item.name,
-        serving_description: item.serving_description,
-        quantity: item.quantity,
-        calories: Math.round(item.calories),
-        protein_g: Number(item.protein_g),
-        carbs_g: Number(item.carbs_g),
-        fat_g: Number(item.fat_g),
-        fiber_g: item.fiber_g != null ? Number(item.fiber_g) : undefined,
-        sugar_g: item.sugar_g != null ? Number(item.sugar_g) : undefined,
-      })
-      if (result.error) {
-        setError(result.error)
-        setSaving(false)
-        return
-      }
+
+    const totalCals    = editedItems.reduce((s, i) => s + Math.round(i.calories), 0)
+    const totalProtein = editedItems.reduce((s, i) => s + Number(i.protein_g), 0)
+    const totalCarbs   = editedItems.reduce((s, i) => s + Number(i.carbs_g), 0)
+    const totalFat     = editedItems.reduce((s, i) => s + Number(i.fat_g), 0)
+
+    // Store the ingredient breakdown in notes so FoodLogItem can display it
+    const breakdown = editedItems.length > 1
+      ? JSON.stringify({ _type: 'breakdown', items: editedItems })
+      : undefined
+
+    const entryName = mealName.trim() || editedItems[0]?.name || 'Meal'
+    const servingDesc = editedItems.length > 1
+      ? `${editedItems.length} items`
+      : editedItems[0]?.serving_description
+
+    const result = await saveMealEntry({
+      meal_type: mealType,
+      source: textInput ? 'ai_text' : 'ai_photo',
+      raw_input: textInput || undefined,
+      name: entryName,
+      serving_description: servingDesc,
+      calories: totalCals,
+      protein_g: totalProtein,
+      carbs_g: totalCarbs,
+      fat_g: totalFat,
+      notes: breakdown,
+    })
+
+    if (result.error) {
+      setError(result.error)
+      setSaving(false)
+      return
     }
     startNavTransition(() => router.push('/bite'))
   }
@@ -423,6 +439,17 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Meal name */}
+            <div>
+              <p className="text-xs font-semibold text-ink-secondary uppercase tracking-wider mb-2">Meal name</p>
+              <input
+                className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-ink font-semibold placeholder:text-ink-tertiary focus:outline-none focus:border-bite/50 focus:ring-1 focus:ring-bite/20 text-base"
+                value={mealName}
+                onChange={(e) => setMealName(e.target.value)}
+                placeholder="e.g., Chicken Rice Bowl"
+              />
             </div>
 
             {/* Confidence */}

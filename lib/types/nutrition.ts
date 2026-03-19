@@ -126,6 +126,7 @@ export interface MealAnalysisItem {
 }
 
 export interface MealAnalysisResult {
+  meal_name?: string
   items: MealAnalysisItem[]
   confidence: number
   confidence_notes?: string

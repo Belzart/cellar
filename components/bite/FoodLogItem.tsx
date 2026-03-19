@@ -1,19 +1,32 @@
 'use client'
 
+'use client'
+
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, ChevronDown } from 'lucide-react'
-import { MealEntry } from '@/lib/types/nutrition'
+import { MealEntry, MealAnalysisItem } from '@/lib/types/nutrition'
 import { deleteMealEntry } from '@/lib/actions/nutrition'
 
 interface FoodLogItemProps {
   entry: MealEntry
 }
 
+function parseBreakdown(notes: string | null): MealAnalysisItem[] | null {
+  if (!notes) return null
+  try {
+    const parsed = JSON.parse(notes)
+    if (parsed._type === 'breakdown' && Array.isArray(parsed.items)) return parsed.items
+  } catch {}
+  return null
+}
+
 export default function FoodLogItem({ entry }: FoodLogItemProps) {
   const router = useRouter()
   const [expanded, setExpanded] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  const breakdown = parseBreakdown(entry.notes)
 
   async function handleDelete() {
     setDeleting(true)
@@ -34,7 +47,7 @@ export default function FoodLogItem({ entry }: FoodLogItemProps) {
         <div className="flex-1 min-w-0">
           <p className="text-ink text-sm font-medium truncate">{entry.name}</p>
           <p className="text-ink-tertiary text-xs mt-0.5">
-            {entry.serving_description ?? `${entry.quantity}×`}
+            {breakdown ? `${breakdown.length} items` : (entry.serving_description ?? `${entry.quantity}×`)}
           </p>
         </div>
         <div className="flex items-center gap-3 ml-2 flex-shrink-0">
@@ -46,6 +59,7 @@ export default function FoodLogItem({ entry }: FoodLogItemProps) {
 
       {expanded && (
         <div className="mx-3 mb-2 bg-surface-elevated rounded-xl p-3 space-y-2">
+          {/* Total macros */}
           <div className="flex gap-4 text-xs">
             <div className="text-center">
               <p className="font-semibold text-ink">{Math.round(Number(entry.protein_g))}g</p>
@@ -66,6 +80,29 @@ export default function FoodLogItem({ entry }: FoodLogItemProps) {
               </div>
             )}
           </div>
+
+          {/* Ingredient breakdown */}
+          {breakdown && (
+            <div className="pt-2 border-t border-surface-border space-y-1.5">
+              <p className="text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider">Breakdown</p>
+              {breakdown.map((item, i) => (
+                <div key={i} className="flex items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-ink truncate">{item.name}</p>
+                    <p className="text-[10px] text-ink-tertiary">{item.serving_description}</p>
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-ink-tertiary flex-shrink-0">
+                    <span className="font-medium text-ink">{Math.round(item.calories)}</span>
+                    <span>kcal</span>
+                    <span>·</span>
+                    <span>{Math.round(Number(item.protein_g))}p</span>
+                    <span>{Math.round(Number(item.carbs_g))}c</span>
+                    <span>{Math.round(Number(item.fat_g))}f</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <button
             onClick={handleDelete}
