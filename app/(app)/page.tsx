@@ -64,7 +64,7 @@ export default async function HomePage() {
           )}
         </div>
         <Link
-          href="/profile#settings"
+          href="/settings"
           className="w-9 h-9 rounded-full bg-bg-elevated border border-border flex items-center justify-center mt-1"
         >
           <Settings className="w-4 h-4 text-text-tertiary" />

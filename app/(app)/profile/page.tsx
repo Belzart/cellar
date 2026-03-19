@@ -1,16 +1,11 @@
 import { getLatestProfile } from '@/lib/actions/recommendations'
-import { getMyProfile } from '@/lib/actions/profile'
 import InsightCard from '@/components/profile/InsightCard'
 import EmptyState from '@/components/shared/EmptyState'
-import ProfileSettings from '@/components/profile/ProfileSettings'
 import Link from 'next/link'
 import { STYLE_LABELS } from '@/lib/utils'
 
 export default async function ProfilePage() {
-  const [profile, myProfile] = await Promise.all([
-    getLatestProfile(),
-    getMyProfile(),
-  ])
+  const profile = await getLatestProfile()
 
   return (
     <div className="min-h-screen animate-fade-in pb-8">
@@ -151,15 +146,6 @@ export default async function ProfilePage() {
         </>
       )}
 
-      {/* ── Settings ── */}
-      <section id="settings" className="px-4 mb-8">
-        <h2 className="label mb-3">Settings</h2>
-        <ProfileSettings
-          initialDisplayName={myProfile?.display_name ?? ''}
-          initialCellarName={myProfile?.cellar_name ?? ''}
-          email={myProfile?.email ?? ''}
-        />
-      </section>
     </div>
   )
 }
