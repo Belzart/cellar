@@ -29,10 +29,14 @@ function formatDateLabel(dateStr: string): { label: string; sub: string } {
   return { label: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }), sub }
 }
 
-function getDayDates(): string[] {
+// Returns 7 dates centered on the given date (3 before, the date, 3 after)
+function getDayDates(centerDate: string): string[] {
+  const center = new Date(centerDate + 'T12:00:00')
   const dates: string[] = []
-  for (let i = 6; i >= 0; i--) {
-    dates.push(toDateStr(new Date(Date.now() - i * 86400000)))
+  for (let i = -3; i <= 3; i++) {
+    const d = new Date(center)
+    d.setDate(d.getDate() + i)
+    dates.push(toDateStr(d))
   }
   return dates
 }
@@ -49,7 +53,7 @@ export default function BiteClient({ initialSummary, initialDate }: BiteClientPr
   const today = toDateStr(new Date())
   const isToday = selectedDate === today
 
-  const dayDates = getDayDates()
+  const dayDates = getDayDates(selectedDate)
   const { label, sub } = formatDateLabel(selectedDate)
 
   const fetchDay = useCallback((dateStr: string) => {
@@ -166,8 +170,7 @@ export default function BiteClient({ initialSummary, initialDate }: BiteClientPr
 
           <button
             onClick={goForward}
-            disabled={selectedDate >= today}
-            className="w-8 h-8 rounded-full flex items-center justify-center active:scale-90 transition-transform text-ink-tertiary disabled:opacity-20"
+            className="w-8 h-8 rounded-full flex items-center justify-center active:scale-90 transition-transform text-ink-tertiary"
           >
             <ChevronRight className="w-4 h-4" />
           </button>

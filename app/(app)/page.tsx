@@ -106,6 +106,9 @@ export default async function HubPage() {
             {/* Subtle warm glow */}
             <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full opacity-30"
               style={{ background: 'radial-gradient(circle, #10B981 0%, transparent 70%)' }} />
+            <div className="absolute top-1/2 right-5 -translate-y-1/2 text-[88px] leading-none opacity-[0.12] select-none">
+              🍏
+            </div>
 
             {/* content */}
             <div className="relative p-6 h-full flex flex-col justify-between">
