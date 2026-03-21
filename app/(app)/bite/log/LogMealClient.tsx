@@ -2,14 +2,40 @@
 
 import { useState, useRef, useTransition, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, Type, Camera, AlertCircle, CheckCircle2, Edit3, BookmarkPlus, X, Plus, Search } from 'lucide-react'
+import dynamic from 'next/dynamic'
+import {
+  ChevronLeft, Type, Camera, AlertCircle, CheckCircle2,
+  Edit3, BookmarkPlus, X, Plus, Search, Barcode, PackageSearch
+} from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import { MealType, MEAL_TYPES, MEAL_TYPE_LABELS, MEAL_TYPE_EMOJI, MealAnalysisResult, MealAnalysisItem } from '@/lib/types/nutrition'
+import {
+  MealType, MEAL_TYPES, MEAL_TYPE_LABELS, MEAL_TYPE_EMOJI,
+  MealAnalysisResult, MealAnalysisItem
+} from '@/lib/types/nutrition'
 import { saveMealEntry, saveFoodToLibrary } from '@/lib/actions/nutrition'
 import type { FoodSuggestion } from '@/app/api/food-search/route'
+import type { BarcodeProduct } from '@/app/api/barcode/route'
 
-type Mode = 'choose' | 'text' | 'photo' | 'result' | 'manual'
+// Dynamic import — BarcodeScanner uses camera APIs, must not SSR
+const BarcodeScanner = dynamic(() => import('@/components/bite/BarcodeScanner'), { ssr: false })
+
+type Mode = 'choose' | 'text' | 'photo' | 'result' | 'manual' | 'barcode'
+
+// ── Barcode localStorage cache ────────────────────────────────
+const BARCODE_CACHE_KEY = 'bite_barcode_cache'
+
+function loadBarcodeCache(): Record<string, BarcodeProduct> {
+  if (typeof window === 'undefined') return {}
+  try { return JSON.parse(localStorage.getItem(BARCODE_CACHE_KEY) ?? '{}') } catch { return {} }
+}
+function saveBarcodeCache(code: string, product: BarcodeProduct) {
+  try {
+    const cache = loadBarcodeCache()
+    cache[code] = product
+    localStorage.setItem(BARCODE_CACHE_KEY, JSON.stringify(cache))
+  } catch {}
+}
 
 interface LogMealClientProps {
   initialMealType?: string
@@ -46,10 +72,16 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
   const [, startNavTransition] = useTransition()
   const [savedToLibrary, setSavedToLibrary] = useState<Set<number>>(new Set())
 
-  // "Add More" state — shown in result mode
+  // "Add More" state
   const [showAddMore, setShowAddMore] = useState(false)
   const [addMoreText, setAddMoreText] = useState('')
   const [addMoreAnalyzing, setAddMoreAnalyzing] = useState(false)
+
+  // Barcode state
+  const [barcodeScanning, setBarcodeScanning] = useState(false)
+  const [barcodeLoading, setBarcodeLoading] = useState(false)
+  const [barcodeNotFound, setBarcodeNotFound] = useState(false)
+  const [lastScannedCode, setLastScannedCode] = useState<string | null>(null)
 
   // Manual entry state
   const [manualName, setManualName] = useState('')
@@ -67,7 +99,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // ── Food autocomplete fetch ───────────────────────────────────
+  // ── Food autocomplete ─────────────────────────────────────────
   const fetchSuggestions = useCallback(async (q: string) => {
     if (q.length < 2) { setSuggestions([]); setShowSuggestions(false); return }
     setSearchLoading(true)
@@ -76,11 +108,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
       const data = await res.json() as { results: FoodSuggestion[] }
       setSuggestions(data.results ?? [])
       setShowSuggestions(data.results.length > 0)
-    } catch {
-      setSuggestions([])
-    } finally {
-      setSearchLoading(false)
-    }
+    } catch { setSuggestions([]) } finally { setSearchLoading(false) }
   }, [])
 
   useEffect(() => {
@@ -98,20 +126,91 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
     setSuggestions([])
   }
 
-  // ── Live totals from editedItems ──────────────────────────────
+  // ── Live totals ───────────────────────────────────────────────
   const liveTotals = {
-    calories: editedItems.reduce((s, i) => s + Math.round(Number(i.calories)), 0),
+    calories:  editedItems.reduce((s, i) => s + Math.round(Number(i.calories)), 0),
     protein_g: editedItems.reduce((s, i) => s + Number(i.protein_g), 0),
-    carbs_g: editedItems.reduce((s, i) => s + Number(i.carbs_g), 0),
-    fat_g: editedItems.reduce((s, i) => s + Number(i.fat_g), 0),
+    carbs_g:   editedItems.reduce((s, i) => s + Number(i.carbs_g), 0),
+    fat_g:     editedItems.reduce((s, i) => s + Number(i.fat_g), 0),
+  }
+
+  // ── Barcode scan handler ──────────────────────────────────────
+  const handleBarcodeScan = useCallback(async (code: string) => {
+    setBarcodeScanning(false)
+    setBarcodeLoading(true)
+    setBarcodeNotFound(false)
+    setError(null)
+    setLastScannedCode(code)
+
+    // Check localStorage cache first for instant result
+    const cached = loadBarcodeCache()[code]
+    if (cached) {
+      populateFromBarcode(cached)
+      setBarcodeLoading(false)
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/barcode?code=${encodeURIComponent(code)}`)
+      const data = await res.json() as { found: boolean; product: BarcodeProduct | null; error?: string }
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Lookup failed')
+      if (!data.found || !data.product) {
+        setBarcodeNotFound(true)
+        setBarcodeLoading(false)
+        setMode('barcode') // stay on barcode not-found screen
+        return
+      }
+      saveBarcodeCache(code, data.product)
+      populateFromBarcode(data.product)
+    } catch {
+      setError('Product lookup failed — enter details manually')
+      setMode('barcode')
+    } finally {
+      setBarcodeLoading(false)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function populateFromBarcode(product: BarcodeProduct) {
+    const name = product.brand ? `${product.brand} ${product.name}` : product.name
+    // Convert to MealAnalysisResult shape and go to review mode
+    const syntheticResult: MealAnalysisResult = {
+      meal_name: name,
+      items: [{
+        name,
+        serving_description: product.serving_description,
+        quantity: 1,
+        calories: product.calories,
+        protein_g: product.protein_g,
+        carbs_g: product.carbs_g,
+        fat_g: product.fat_g,
+        fiber_g: product.fiber_g,
+        sugar_g: product.sugar_g,
+      }],
+      confidence: 1,
+      total_calories: product.calories,
+      total_protein_g: product.protein_g,
+      total_carbs_g: product.carbs_g,
+      total_fat_g: product.fat_g,
+    }
+    setAnalysisResult(syntheticResult)
+    setEditedItems(syntheticResult.items)
+    setMealName(name)
+    setMode('result')
+  }
+
+  function goBack() {
+    setMode('choose')
+    setError(null)
+    setShowAddMore(false)
+    setBarcodeNotFound(false)
+    setLastScannedCode(null)
+    setBarcodeScanning(false)
   }
 
   // ── AI Analysis ───────────────────────────────────────────────
-
   async function runTextAnalysis() {
     if (!textInput.trim()) return
-    setAnalyzing(true)
-    setError(null)
+    setAnalyzing(true); setError(null)
     try {
       const res = await fetch('/api/analyze-meal', {
         method: 'POST',
@@ -126,15 +225,12 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
       setMode('result')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Analysis failed')
-    } finally {
-      setAnalyzing(false)
-    }
+    } finally { setAnalyzing(false) }
   }
 
   async function runPhotoAnalysis() {
     if (!imageFile) return
-    setAnalyzing(true)
-    setError(null)
+    setAnalyzing(true); setError(null)
     try {
       const base64 = await fileToBase64(imageFile)
       const res = await fetch('/api/analyze-meal', {
@@ -150,16 +246,12 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
       setMode('result')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Analysis failed')
-    } finally {
-      setAnalyzing(false)
-    }
+    } finally { setAnalyzing(false) }
   }
 
-  // Analyze additional food and APPEND items to existing editedItems
   async function runAddMoreAnalysis() {
     if (!addMoreText.trim()) return
-    setAddMoreAnalyzing(true)
-    setError(null)
+    setAddMoreAnalyzing(true); setError(null)
     try {
       const res = await fetch('/api/analyze-meal', {
         method: 'POST',
@@ -168,15 +260,11 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Analysis failed')
-      const newItems: MealAnalysisItem[] = data.result.items ?? []
-      setEditedItems((prev) => [...prev, ...newItems])
-      setAddMoreText('')
-      setShowAddMore(false)
+      setEditedItems((prev) => [...prev, ...(data.result.items ?? [])])
+      setAddMoreText(''); setShowAddMore(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Analysis failed')
-    } finally {
-      setAddMoreAnalyzing(false)
-    }
+    } finally { setAddMoreAnalyzing(false) }
   }
 
   function fileToBase64(file: File): Promise<string> {
@@ -196,7 +284,6 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
   }
 
   // ── Item editing ──────────────────────────────────────────────
-
   function updateItem(idx: number, field: keyof MealAnalysisItem, value: string | number) {
     setEditedItems((prev) => prev.map((item, i) =>
       i === idx ? { ...item, [field]: typeof value === 'string' ? value : Number(value) } : item
@@ -207,26 +294,20 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
     setEditedItems((prev) => prev.filter((_, i) => i !== idx))
   }
 
-  // ── Save entries ──────────────────────────────────────────────
-
+  // ── Save ──────────────────────────────────────────────────────
   async function handleSaveAll() {
     if (editedItems.length === 0) return
-    setSaving(true)
-    setError(null)
-
+    setSaving(true); setError(null)
     const breakdown = editedItems.length > 1
-      ? JSON.stringify({ _type: 'breakdown', items: editedItems })
-      : undefined
-
+      ? JSON.stringify({ _type: 'breakdown', items: editedItems }) : undefined
     const entryName = mealName.trim() || editedItems[0]?.name || 'Meal'
     const servingDesc = editedItems.length > 1
-      ? `${editedItems.length} items`
-      : editedItems[0]?.serving_description
+      ? `${editedItems.length} items` : editedItems[0]?.serving_description
 
     const result = await saveMealEntry({
       meal_type: mealType,
-      source: textInput ? 'ai_text' : 'ai_photo',
-      raw_input: textInput || undefined,
+      source: lastScannedCode ? 'barcode' : (textInput ? 'ai_text' : 'ai_photo'),
+      raw_input: textInput || lastScannedCode || undefined,
       name: entryName,
       serving_description: servingDesc,
       calories: liveTotals.calories,
@@ -235,19 +316,13 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
       fat_g: liveTotals.fat_g,
       notes: breakdown,
     })
-
-    if (result.error) {
-      setError(result.error)
-      setSaving(false)
-      return
-    }
+    if (result.error) { setError(result.error); setSaving(false); return }
     startNavTransition(() => router.push('/bite'))
   }
 
   async function handleSaveManual() {
     if (!manualName || !manualCals) return
-    setSaving(true)
-    setError(null)
+    setSaving(true); setError(null)
     const result = await saveMealEntry({
       meal_type: mealType,
       source: 'manual',
@@ -258,11 +333,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
       carbs_g: parseFloat(manualCarbs) || 0,
       fat_g: parseFloat(manualFat) || 0,
     })
-    if (result.error) {
-      setError(result.error)
-      setSaving(false)
-      return
-    }
+    if (result.error) { setError(result.error); setSaving(false); return }
     startNavTransition(() => router.push('/bite'))
   }
 
@@ -281,12 +352,28 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
         sodium_mg: null,
       })
       setSavedToLibrary((prev) => new Set([...prev, idx]))
-    } catch {
-      // non-critical
-    }
+    } catch {}
   }
 
   // ── Render ────────────────────────────────────────────────────
+
+  // Full-screen scanner overlay — rendered on top of everything
+  if (barcodeScanning) {
+    return <BarcodeScanner onDetected={handleBarcodeScan} onClose={() => setBarcodeScanning(false)} />
+  }
+
+  // Loading state shown after scanner closes and lookup is in flight
+  if (barcodeLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6">
+        <div className="w-14 h-14 rounded-2xl bg-surface-card border border-surface-border flex items-center justify-center shadow-bite-card">
+          <PackageSearch className="w-7 h-7 text-bite animate-pulse" />
+        </div>
+        <p className="text-ink font-semibold">Looking up product…</p>
+        <p className="text-ink-tertiary text-sm text-center">Searching food database</p>
+      </div>
+    )
+  }
 
   return (
     <div className="animate-fade-in">
@@ -294,7 +381,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
       <header className="flex items-center gap-3 px-5 pt-[calc(env(safe-area-inset-top)+16px)] pb-4">
         {mode !== 'choose' ? (
           <button
-            onClick={() => { setMode('choose'); setError(null); setShowAddMore(false) }}
+            onClick={goBack}
             className="w-9 h-9 rounded-full bg-surface-card border border-surface-border flex items-center justify-center active:scale-95 transition-transform shadow-bite-card"
           >
             <ChevronLeft className="w-4 h-4 text-ink" />
@@ -307,20 +394,19 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
             <ChevronLeft className="w-4 h-4 text-ink" />
           </Link>
         )}
-        <div>
-          <h1 className="text-xl font-bold text-ink">
-            {mode === 'choose' && 'Log a Meal'}
-            {mode === 'text' && 'Describe Food'}
-            {mode === 'photo' && 'Photo Analysis'}
-            {mode === 'result' && 'Review & Edit'}
-            {mode === 'manual' && 'Add Manually'}
-          </h1>
-        </div>
+        <h1 className="text-xl font-bold text-ink">
+          {mode === 'choose' && 'Log a Meal'}
+          {mode === 'text' && 'Describe Food'}
+          {mode === 'photo' && 'Photo Analysis'}
+          {mode === 'result' && 'Review & Edit'}
+          {mode === 'manual' && 'Add Manually'}
+          {mode === 'barcode' && 'Barcode Scan'}
+        </h1>
       </header>
 
       <div className="px-4 pb-8 space-y-4">
 
-        {/* ── Meal type selector (always visible except result) ── */}
+        {/* Meal type selector */}
         {mode !== 'result' && (
           <div>
             <p className="text-xs font-semibold text-ink-secondary uppercase tracking-wider mb-2">Meal</p>
@@ -347,6 +433,22 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
         {/* ── Choose mode ── */}
         {mode === 'choose' && (
           <div className="space-y-3 pt-2">
+            {/* Barcode scan — highlighted as first option */}
+            <button
+              onClick={() => { setMode('choose'); setBarcodeNotFound(false); setBarcodeScanning(true) }}
+              className="w-full bg-surface-card border border-surface-border rounded-2xl p-5 text-left active:scale-[0.98] transition-transform shadow-bite-card"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-[#ECFDF5] flex items-center justify-center flex-shrink-0">
+                  <Barcode className="w-6 h-6 text-[#059669]" />
+                </div>
+                <div>
+                  <p className="text-ink font-semibold">Scan barcode</p>
+                  <p className="text-ink-tertiary text-sm mt-0.5">Point at any food package</p>
+                </div>
+              </div>
+            </button>
+
             <button
               onClick={() => setMode('text')}
               className="w-full bg-surface-card border border-surface-border rounded-2xl p-5 text-left active:scale-[0.98] transition-transform shadow-bite-card"
@@ -394,6 +496,49 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
           </div>
         )}
 
+        {/* ── Barcode not-found / error state ── */}
+        {mode === 'barcode' && (
+          <div className="space-y-4 pt-2">
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-amber-100 flex items-center justify-center mx-auto mb-3">
+                <PackageSearch className="w-7 h-7 text-amber-600" />
+              </div>
+              <p className="text-amber-800 font-semibold text-base">
+                {barcodeNotFound ? 'Product not found' : 'Lookup failed'}
+              </p>
+              {lastScannedCode && (
+                <p className="text-amber-600/70 text-xs mt-1 font-mono">
+                  Code: {lastScannedCode}
+                </p>
+              )}
+              <p className="text-amber-700 text-sm mt-2">
+                {barcodeNotFound
+                  ? 'This barcode isn\'t in the database yet.'
+                  : 'Could not connect to food database.'}
+              </p>
+            </div>
+
+            <button
+              onClick={() => setBarcodeScanning(true)}
+              className="w-full py-3 rounded-2xl bg-surface-card border border-surface-border text-ink font-semibold active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <Barcode className="w-4 h-4" />
+              Try scanning again
+            </button>
+
+            <button
+              onClick={() => {
+                setBarcodeNotFound(false)
+                setLastScannedCode(null)
+                setMode('manual')
+              }}
+              className="w-full py-3 rounded-2xl bg-ink text-surface-card font-semibold active:scale-95 transition-all"
+            >
+              Enter manually instead
+            </button>
+          </div>
+        )}
+
         {/* ── Text input ── */}
         {mode === 'text' && (
           <div className="space-y-4">
@@ -410,14 +555,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
                 autoFocus
               />
             </div>
-
-            {error && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
-                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                <p className="text-red-600 text-sm">{error}</p>
-              </div>
-            )}
-
+            {error && <ErrorBanner message={error} />}
             <button
               onClick={runTextAnalysis}
               disabled={!textInput.trim() || analyzing}
@@ -444,7 +582,6 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
               className="hidden"
               onChange={handleImageSelect}
             />
-
             {!imagePreview ? (
               <button
                 onClick={() => fileInputRef.current?.click()}
@@ -465,14 +602,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
                 </button>
               </div>
             )}
-
-            {error && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
-                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                <p className="text-red-600 text-sm">{error}</p>
-              </div>
-            )}
-
+            {error && <ErrorBanner message={error} />}
             <button
               onClick={runPhotoAnalysis}
               disabled={!imageFile || analyzing}
@@ -491,7 +621,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
         {/* ── Results / edit ── */}
         {mode === 'result' && analysisResult && (
           <div className="space-y-4 animate-slide-up">
-            {/* Meal type at top */}
+            {/* Meal type */}
             <div>
               <p className="text-xs font-semibold text-ink-secondary uppercase tracking-wider mb-2">Logging to</p>
               <div className="flex gap-2 flex-wrap">
@@ -524,47 +654,52 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
               />
             </div>
 
-            {/* Confidence */}
-            <div className={cn(
-              'flex items-start gap-2 rounded-xl p-3 border',
-              analysisResult.confidence >= 0.75
-                ? 'bg-green-50 border-green-200'
-                : 'bg-amber-50 border-amber-200'
-            )}>
-              {analysisResult.confidence >= 0.75
-                ? <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-                : <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-              }
-              <div>
-                <p className={cn('text-sm font-medium', analysisResult.confidence >= 0.75 ? 'text-green-700' : 'text-amber-700')}>
-                  {Math.round(analysisResult.confidence * 100)}% confidence
-                </p>
-                {analysisResult.confidence_notes && (
-                  <p className="text-xs text-amber-600 mt-0.5">{analysisResult.confidence_notes}</p>
-                )}
+            {/* Confidence badge — omit for barcode (confidence = 1, from DB) */}
+            {!lastScannedCode && (
+              <div className={cn(
+                'flex items-start gap-2 rounded-xl p-3 border',
+                analysisResult.confidence >= 0.75
+                  ? 'bg-green-50 border-green-200'
+                  : 'bg-amber-50 border-amber-200'
+              )}>
+                {analysisResult.confidence >= 0.75
+                  ? <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                  : <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                }
+                <div>
+                  <p className={cn('text-sm font-medium', analysisResult.confidence >= 0.75 ? 'text-green-700' : 'text-amber-700')}>
+                    {Math.round(analysisResult.confidence * 100)}% confidence
+                  </p>
+                  {analysisResult.confidence_notes && (
+                    <p className="text-xs text-amber-600 mt-0.5">{analysisResult.confidence_notes}</p>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Live total summary — updates as user edits items */}
+            {/* Barcode source badge */}
+            {lastScannedCode && (
+              <div className="flex items-center gap-2 bg-[#ECFDF5] border border-[#059669]/20 rounded-xl p-3">
+                <Barcode className="w-4 h-4 text-[#059669] flex-shrink-0" />
+                <p className="text-sm text-[#059669] font-medium">From barcode database</p>
+              </div>
+            )}
+
+            {/* Live totals */}
             <div className="bg-surface-card border border-surface-border rounded-2xl p-4 shadow-bite-card">
               <p className="text-xs font-semibold text-ink-secondary uppercase tracking-wider mb-3">Total</p>
               <div className="flex gap-4">
-                <div className="text-center flex-1">
-                  <p className="text-2xl font-bold text-ink">{liveTotals.calories}</p>
-                  <p className="text-xs text-ink-tertiary">kcal</p>
-                </div>
-                <div className="text-center flex-1">
-                  <p className="text-xl font-bold text-bite">{Math.round(liveTotals.protein_g)}g</p>
-                  <p className="text-xs text-ink-tertiary">protein</p>
-                </div>
-                <div className="text-center flex-1">
-                  <p className="text-xl font-bold text-[#3B82F6]">{Math.round(liveTotals.carbs_g)}g</p>
-                  <p className="text-xs text-ink-tertiary">carbs</p>
-                </div>
-                <div className="text-center flex-1">
-                  <p className="text-xl font-bold text-[#F59E0B]">{Math.round(liveTotals.fat_g)}g</p>
-                  <p className="text-xs text-ink-tertiary">fat</p>
-                </div>
+                {[
+                  { val: liveTotals.calories, label: 'kcal', color: 'text-ink', size: 'text-2xl' },
+                  { val: Math.round(liveTotals.protein_g), label: 'protein', color: 'text-bite', size: 'text-xl', suffix: 'g' },
+                  { val: Math.round(liveTotals.carbs_g), label: 'carbs', color: 'text-[#3B82F6]', size: 'text-xl', suffix: 'g' },
+                  { val: Math.round(liveTotals.fat_g), label: 'fat', color: 'text-[#F59E0B]', size: 'text-xl', suffix: 'g' },
+                ].map((item) => (
+                  <div key={item.label} className="text-center flex-1">
+                    <p className={cn(item.size, 'font-bold', item.color)}>{item.val}{item.suffix ?? ''}</p>
+                    <p className="text-xs text-ink-tertiary">{item.label}</p>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -587,10 +722,9 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
                         <BookmarkPlus className="w-3.5 h-3.5" />
                         {savedToLibrary.has(idx) ? 'Saved' : 'Save'}
                       </button>
-                      {/* Remove item button */}
                       <button
                         onClick={() => removeItem(idx)}
-                        className="w-6 h-6 rounded-full bg-surface-elevated flex items-center justify-center text-ink-tertiary active:scale-90 transition-all hover:bg-red-50 hover:text-red-400"
+                        className="w-6 h-6 rounded-full bg-surface-elevated flex items-center justify-center text-ink-tertiary active:scale-90 transition-all"
                         aria-label="Remove item"
                       >
                         <X className="w-3 h-3" />
@@ -598,7 +732,6 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
                     </div>
                   </div>
                   <p className="text-ink-tertiary text-xs mb-3">{item.serving_description}</p>
-
                   <div className="grid grid-cols-4 gap-2">
                     {(['calories', 'protein_g', 'carbs_g', 'fat_g'] as const).map((field) => (
                       <div key={field}>
@@ -619,7 +752,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
               ))}
             </div>
 
-            {/* ── Add More section ── */}
+            {/* Add More */}
             {!showAddMore ? (
               <button
                 onClick={() => setShowAddMore(true)}
@@ -662,12 +795,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
               </div>
             )}
 
-            {error && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
-                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                <p className="text-red-600 text-sm">{error}</p>
-              </div>
-            )}
+            {error && <ErrorBanner message={error} />}
 
             <button
               onClick={handleSaveAll}
@@ -679,7 +807,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
           </div>
         )}
 
-        {/* ── Manual entry with food autocomplete ── */}
+        {/* ── Manual entry ── */}
         {mode === 'manual' && (
           <div className="space-y-4 animate-slide-up">
             <div className="space-y-3">
@@ -705,8 +833,6 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
                     }
                   </div>
                 </div>
-
-                {/* Autocomplete dropdown */}
                 {showSuggestions && suggestions.length > 0 && (
                   <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-surface-card border border-surface-border rounded-2xl shadow-bite-card overflow-hidden max-h-64 overflow-y-auto">
                     {suggestions.map((s, i) => (
@@ -739,59 +865,28 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-ink-secondary uppercase tracking-wider block mb-1">Calories *</label>
-                  <input
-                    type="number"
-                    className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-ink placeholder:text-ink-tertiary focus:outline-none focus:border-bite/50 text-base"
-                    value={manualCals}
-                    onChange={(e) => setManualCals(e.target.value)}
-                    placeholder="0"
-                    inputMode="numeric"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-ink-secondary uppercase tracking-wider block mb-1">Protein (g)</label>
-                  <input
-                    type="number"
-                    className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-ink placeholder:text-ink-tertiary focus:outline-none focus:border-bite/50 text-base"
-                    value={manualProtein}
-                    onChange={(e) => setManualProtein(e.target.value)}
-                    placeholder="0"
-                    inputMode="decimal"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-ink-secondary uppercase tracking-wider block mb-1">Carbs (g)</label>
-                  <input
-                    type="number"
-                    className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-ink placeholder:text-ink-tertiary focus:outline-none focus:border-bite/50 text-base"
-                    value={manualCarbs}
-                    onChange={(e) => setManualCarbs(e.target.value)}
-                    placeholder="0"
-                    inputMode="decimal"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-ink-secondary uppercase tracking-wider block mb-1">Fat (g)</label>
-                  <input
-                    type="number"
-                    className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-ink placeholder:text-ink-tertiary focus:outline-none focus:border-bite/50 text-base"
-                    value={manualFat}
-                    onChange={(e) => setManualFat(e.target.value)}
-                    placeholder="0"
-                    inputMode="decimal"
-                  />
-                </div>
+                {[
+                  { label: 'Calories *', key: 'manualCals', val: manualCals, set: setManualCals, mode: 'numeric' },
+                  { label: 'Protein (g)', key: 'manualProtein', val: manualProtein, set: setManualProtein, mode: 'decimal' },
+                  { label: 'Carbs (g)', key: 'manualCarbs', val: manualCarbs, set: setManualCarbs, mode: 'decimal' },
+                  { label: 'Fat (g)', key: 'manualFat', val: manualFat, set: setManualFat, mode: 'decimal' },
+                ].map(({ label, key, val, set, mode: im }) => (
+                  <div key={key}>
+                    <label className="text-xs font-semibold text-ink-secondary uppercase tracking-wider block mb-1">{label}</label>
+                    <input
+                      type="number"
+                      className="w-full bg-surface-card border border-surface-border rounded-xl px-4 py-3 text-ink placeholder:text-ink-tertiary focus:outline-none focus:border-bite/50 text-base"
+                      value={val}
+                      onChange={(e) => set(e.target.value)}
+                      placeholder="0"
+                      inputMode={im as 'numeric' | 'decimal'}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
 
-            {error && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
-                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                <p className="text-red-600 text-sm">{error}</p>
-              </div>
-            )}
+            {error && <ErrorBanner message={error} />}
 
             <button
               onClick={handleSaveManual}
@@ -808,6 +903,15 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
+      <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+      <p className="text-red-600 text-sm">{message}</p>
     </div>
   )
 }
