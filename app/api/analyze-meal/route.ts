@@ -40,10 +40,11 @@ Rules:
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { text, imageBase64, imageMimeType } = body as {
+    const { text, imageBase64, imageMimeType, refinementNote } = body as {
       text?: string
       imageBase64?: string
       imageMimeType?: string
+      refinementNote?: string  // optional correction hint (e.g. "it was a 3x3", "animal style")
     }
 
     if (!text && !imageBase64) {
@@ -76,9 +77,17 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const userText = text
-      ? `Please estimate the nutritional content of: ${text}`
-      : 'Please estimate the nutritional content of the food shown in this photo.'
+    let userText: string
+    if (refinementNote) {
+      // Correction loop: user is refining a previous AI result
+      userText = imageBase64
+        ? `Re-analyze this food photo with the following correction from the user: "${refinementNote}". Update the nutritional estimates to reflect this detail.`
+        : `Re-analyze this food with the following correction: "${refinementNote}". Original description: ${text ?? '(photo)'}. Update the estimates to reflect this detail.`
+    } else {
+      userText = text
+        ? `Please estimate the nutritional content of: ${text}`
+        : 'Please estimate the nutritional content of the food shown in this photo.'
+    }
 
     content.push({ type: 'text', text: userText })
 

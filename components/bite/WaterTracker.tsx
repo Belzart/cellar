@@ -91,8 +91,8 @@ export default function WaterTracker({ consumed_ml, goal_ml }: WaterTrackerProps
     setCustomBottleMl(ml)
     setShowCustomInput(false)
     setCustomInputOz('')
-    // immediately log it
-    addWater(ml)
+    // Only saves the preset — does NOT log water automatically.
+    // Tap the ⭐ button to actually add it to today's intake.
   }
 
   function handleCustomKeyDown(e: React.KeyboardEvent) {
@@ -176,7 +176,7 @@ export default function WaterTracker({ consumed_ml, goal_ml }: WaterTrackerProps
             disabled={!customInputOz || parseFloat(customInputOz) <= 0}
             className="px-3 py-2 rounded-xl bg-[#3B82F6] text-white text-xs font-semibold active:scale-95 transition-all disabled:opacity-40"
           >
-            Save &amp; Add
+            Save Preset
           </button>
           <button
             onClick={() => { setShowCustomInput(false); setCustomInputOz('') }}
@@ -187,14 +187,15 @@ export default function WaterTracker({ consumed_ml, goal_ml }: WaterTrackerProps
         </div>
       ) : (
         <div className="flex gap-1.5 mt-1">
-          {/* Saved custom bottle — quick-add */}
+          {/* Saved custom bottle — quick-add (tap to log) */}
           {customOzLabel && (
             <button
               onClick={() => addWater(customBottleMl!)}
               disabled={busy}
               className="flex-1 py-2 rounded-xl text-xs font-semibold bg-[#ECFDF5] text-[#059669] border border-[#059669]/20 active:scale-95 transition-all disabled:opacity-40"
+              title="Tap to log this amount"
             >
-              ⭐ {customOzLabel}
+              + {customOzLabel}
             </button>
           )}
           {/* Set / change custom bottle */}

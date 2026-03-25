@@ -77,6 +77,15 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
   const [addMoreText, setAddMoreText] = useState('')
   const [addMoreAnalyzing, setAddMoreAnalyzing] = useState(false)
 
+  // Photo refinement state (AI correction loop)
+  const [imageBase64ForRefine, setImageBase64ForRefine] = useState<string | null>(null)
+  const [imageMimeForRefine, setImageMimeForRefine] = useState<string>('image/jpeg')
+  const [showRefine, setShowRefine] = useState(false)
+  const [refineNote, setRefineNote] = useState('')
+  const [refining, setRefining] = useState(false)
+  // Track what source produced the current result (for showing refine vs add-more)
+  const [resultSource, setResultSource] = useState<'text' | 'photo' | 'barcode' | null>(null)
+
   // Barcode state
   const [barcodeScanning, setBarcodeScanning] = useState(false)
   const [barcodeLoading, setBarcodeLoading] = useState(false)
@@ -195,6 +204,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
     setAnalysisResult(syntheticResult)
     setEditedItems(syntheticResult.items)
     setMealName(name)
+    setResultSource('barcode')
     setMode('result')
   }
 
@@ -202,9 +212,38 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
     setMode('choose')
     setError(null)
     setShowAddMore(false)
+    setShowRefine(false)
+    setRefineNote('')
     setBarcodeNotFound(false)
     setLastScannedCode(null)
     setBarcodeScanning(false)
+    setImageBase64ForRefine(null)
+    setResultSource(null)
+  }
+
+  // ── AI Photo refinement (correction loop) ─────────────────────
+  async function runRefinement() {
+    if (!refineNote.trim()) return
+    setRefining(true); setError(null)
+    try {
+      const body = imageBase64ForRefine
+        ? { imageBase64: imageBase64ForRefine, imageMimeType: imageMimeForRefine, refinementNote: refineNote }
+        : { text: textInput, refinementNote: refineNote }
+      const res = await fetch('/api/analyze-meal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Refinement failed')
+      setAnalysisResult(data.result)
+      setEditedItems(data.result.items)
+      setMealName(data.result.meal_name ?? mealName)
+      setShowRefine(false)
+      setRefineNote('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Refinement failed')
+    } finally { setRefining(false) }
   }
 
   // ── AI Analysis ───────────────────────────────────────────────
@@ -222,6 +261,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
       setAnalysisResult(data.result)
       setEditedItems(data.result.items)
       setMealName(data.result.meal_name ?? '')
+      setResultSource('text')
       setMode('result')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Analysis failed')
@@ -233,16 +273,21 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
     setAnalyzing(true); setError(null)
     try {
       const base64 = await fileToBase64(imageFile)
+      const mime = imageFile.type
       const res = await fetch('/api/analyze-meal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: base64, imageMimeType: imageFile.type }),
+        body: JSON.stringify({ imageBase64: base64, imageMimeType: mime }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Analysis failed')
+      // Store base64 so the refinement loop can re-submit the same image
+      setImageBase64ForRefine(base64)
+      setImageMimeForRefine(mime)
       setAnalysisResult(data.result)
       setEditedItems(data.result.items)
       setMealName(data.result.meal_name ?? '')
+      setResultSource('photo')
       setMode('result')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Analysis failed')
@@ -526,6 +571,19 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
               Try scanning again
             </button>
 
+            {/* Photo nutrition label fallback — send to photo mode */}
+            <button
+              onClick={() => {
+                setBarcodeNotFound(false)
+                setLastScannedCode(null)
+                setMode('photo')
+              }}
+              className="w-full py-3 rounded-2xl bg-[#EFF6FF] border border-[#3B82F6]/20 text-[#3B82F6] font-semibold active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <Camera className="w-4 h-4" />
+              Photo the nutrition label instead
+            </button>
+
             <button
               onClick={() => {
                 setBarcodeNotFound(false)
@@ -751,6 +809,61 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
                 </div>
               ))}
             </div>
+
+            {/* ── Fix details / AI refinement loop ── */}
+            {/* Only show for photo/text results — barcode doesn't need it */}
+            {resultSource !== 'barcode' && (
+              !showRefine ? (
+                <button
+                  onClick={() => setShowRefine(true)}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-surface-border text-ink-secondary text-sm font-medium active:scale-95 transition-all bg-surface-card/50"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  Fix details (AI got something wrong)
+                </button>
+              ) : (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-amber-800">Correct the AI result</p>
+                    <button
+                      onClick={() => { setShowRefine(false); setRefineNote('') }}
+                      className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 active:scale-90"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <p className="text-xs text-amber-700">
+                    {resultSource === 'photo'
+                      ? 'Describe what the AI missed about this photo'
+                      : 'Describe what needs to be corrected'}
+                  </p>
+                  <textarea
+                    className="w-full bg-white border border-amber-200 rounded-xl p-3 text-sm text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-1 focus:ring-amber-400/40 resize-none"
+                    rows={2}
+                    placeholder={
+                      resultSource === 'photo'
+                        ? 'e.g. it was a 3x3, animal style, extra cheese…'
+                        : 'e.g. double portion, had ranch dressing too…'
+                    }
+                    value={refineNote}
+                    onChange={(e) => setRefineNote(e.target.value)}
+                    autoFocus
+                  />
+                  <button
+                    onClick={runRefinement}
+                    disabled={!refineNote.trim() || refining}
+                    className={cn(
+                      'w-full py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-95',
+                      !refineNote.trim() || refining
+                        ? 'bg-amber-100 text-amber-400'
+                        : 'bg-amber-600 text-white'
+                    )}
+                  >
+                    {refining ? 'Re-analyzing…' : 'Re-analyze with correction'}
+                  </button>
+                </div>
+              )
+            )}
 
             {/* Add More */}
             {!showAddMore ? (
