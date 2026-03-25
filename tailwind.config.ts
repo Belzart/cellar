@@ -97,6 +97,9 @@ const config: Config = {
         'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
         'shimmer': 'shimmer 1.8s infinite',
         'pulse-soft': 'pulseSoft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        // Day navigation directional slides
+        'day-forward': 'dayForward 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+        'day-back': 'dayBack 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
       },
       keyframes: {
         fadeIn: {
@@ -106,6 +109,16 @@ const config: Config = {
         slideUp: {
           '0%': { transform: 'translateY(24px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        // Slide in from right (going forward in time)
+        dayForward: {
+          '0%': { transform: 'translateX(28px)', opacity: '0' },
+          '100%': { transform: 'translateX(0)', opacity: '1' },
+        },
+        // Slide in from left (going backward in time)
+        dayBack: {
+          '0%': { transform: 'translateX(-28px)', opacity: '0' },
+          '100%': { transform: 'translateX(0)', opacity: '1' },
         },
         shimmer: {
           '0%': { backgroundPosition: '-200% 0' },

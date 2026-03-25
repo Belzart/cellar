@@ -91,6 +91,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
   const [barcodeLoading, setBarcodeLoading] = useState(false)
   const [barcodeNotFound, setBarcodeNotFound] = useState(false)
   const [lastScannedCode, setLastScannedCode] = useState<string | null>(null)
+  const [barcodeDataQuality, setBarcodeDataQuality] = useState<import('@/app/api/barcode/route').BarcodeDataQuality | null>(null)
 
   // Manual entry state
   const [manualName, setManualName] = useState('')
@@ -181,7 +182,6 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
 
   function populateFromBarcode(product: BarcodeProduct) {
     const name = product.brand ? `${product.brand} ${product.name}` : product.name
-    // Convert to MealAnalysisResult shape and go to review mode
     const syntheticResult: MealAnalysisResult = {
       meal_name: name,
       items: [{
@@ -204,6 +204,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
     setAnalysisResult(syntheticResult)
     setEditedItems(syntheticResult.items)
     setMealName(name)
+    setBarcodeDataQuality(product.data_quality ?? null)
     setResultSource('barcode')
     setMode('result')
   }
@@ -348,6 +349,27 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
     const entryName = mealName.trim() || editedItems[0]?.name || 'Meal'
     const servingDesc = editedItems.length > 1
       ? `${editedItems.length} items` : editedItems[0]?.serving_description
+
+    // If this was a barcode scan, persist the user's (possibly corrected) values
+    // back to the local barcode cache so next scan uses their version.
+    if (lastScannedCode && editedItems.length === 1) {
+      const item = editedItems[0]
+      const override: BarcodeProduct = {
+        barcode: lastScannedCode,
+        name: item.name,
+        brand: null,
+        serving_description: item.serving_description ?? servingDesc ?? '1 serving',
+        calories: Math.round(Number(item.calories)),
+        protein_g: Number(item.protein_g),
+        carbs_g: Number(item.carbs_g),
+        fat_g: Number(item.fat_g),
+        fiber_g: item.fiber_g ?? null,
+        sugar_g: item.sugar_g ?? null,
+        sodium_mg: null,
+        data_quality: 'ok', // user-verified
+      }
+      saveBarcodeCache(lastScannedCode, override)
+    }
 
     const result = await saveMealEntry({
       meal_type: mealType,
@@ -735,12 +757,30 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
               </div>
             )}
 
-            {/* Barcode source badge */}
+            {/* Barcode source badge + data quality warning */}
             {lastScannedCode && (
-              <div className="flex items-center gap-2 bg-[#ECFDF5] border border-[#059669]/20 rounded-xl p-3">
-                <Barcode className="w-4 h-4 text-[#059669] flex-shrink-0" />
-                <p className="text-sm text-[#059669] font-medium">From barcode database</p>
-              </div>
+              barcodeDataQuality === 'ok' ? (
+                <div className="flex items-center gap-2 bg-[#ECFDF5] border border-[#059669]/20 rounded-xl p-3">
+                  <Barcode className="w-4 h-4 text-[#059669] flex-shrink-0" />
+                  <p className="text-sm text-[#059669] font-medium">From barcode database · verified serving</p>
+                </div>
+              ) : barcodeDataQuality === 'serving_estimated' ? (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-amber-700 font-medium">Nutrition data may be mixed</p>
+                    <p className="text-xs text-amber-600 mt-0.5">Some macros estimated from 100g values — double-check and edit if needed. Your corrections save for next time.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-amber-700 font-medium">Showing per-100g values</p>
+                    <p className="text-xs text-amber-600 mt-0.5">No serving size in database. Check the package and adjust the numbers before saving. Your corrections save for next time.</p>
+                  </div>
+                </div>
+              )
             )}
 
             {/* Live totals */}

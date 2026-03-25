@@ -50,13 +50,15 @@ export default function BiteClient({ initialSummary, initialDate }: BiteClientPr
   const [selectedDate, setSelectedDate] = useState(initialDate)
   const [summary, setSummary] = useState(initialSummary)
   const [loading, startTransition] = useTransition()
+  const [navDir, setNavDir] = useState<'forward' | 'back'>('forward')
   const today = toDateStr(new Date())
   const isToday = selectedDate === today
 
   const dayDates = getDayDates(selectedDate)
   const { label, sub } = formatDateLabel(selectedDate)
 
-  const fetchDay = useCallback((dateStr: string) => {
+  const fetchDay = useCallback((dateStr: string, dir: 'forward' | 'back') => {
+    setNavDir(dir)
     setSelectedDate(dateStr)
     startTransition(async () => {
       const data = await getDaySummary(dateStr)
@@ -79,13 +81,13 @@ export default function BiteClient({ initialSummary, initialDate }: BiteClientPr
   function goBack() {
     const d = new Date(selectedDate + 'T12:00:00')
     d.setDate(d.getDate() - 1)
-    fetchDay(toDateStr(d))
+    fetchDay(toDateStr(d), 'back')
   }
 
   function goForward() {
     const d = new Date(selectedDate + 'T12:00:00')
     d.setDate(d.getDate() + 1)
-    fetchDay(toDateStr(d))
+    fetchDay(toDateStr(d), 'forward')
   }
 
   const goals = summary?.goals
@@ -150,7 +152,7 @@ export default function BiteClient({ initialSummary, initialDate }: BiteClientPr
               return (
                 <button
                   key={d}
-                  onClick={() => fetchDay(d)}
+                  onClick={() => fetchDay(d, d > selectedDate ? 'forward' : 'back')}
                   className={`flex-1 min-w-[40px] flex flex-col items-center py-1.5 rounded-xl transition-all active:scale-95 ${
                     isSelected
                       ? 'bg-ink text-surface-card'
@@ -177,7 +179,10 @@ export default function BiteClient({ initialSummary, initialDate }: BiteClientPr
         </div>
       </div>
 
-      <div className={`px-4 space-y-4 transition-opacity duration-150 ${loading ? 'opacity-50' : ''}`}>
+      <div
+        key={selectedDate}
+        className={`px-4 space-y-4 ${navDir === 'forward' ? 'animate-day-forward' : 'animate-day-back'} ${loading ? 'opacity-50' : ''}`}
+      >
 
         {/* ── Calories ring + macros ── */}
         <div className="bg-surface-card rounded-3xl p-5 shadow-bite-card">
