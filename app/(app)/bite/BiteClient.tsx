@@ -11,8 +11,12 @@ import MacroBar from '@/components/bite/MacroBar'
 import MealSection from '@/components/bite/MealSection'
 import WaterTracker from '@/components/bite/WaterTracker'
 
+// Use LOCAL year/month/day — not UTC — so PST users don't see "tomorrow" after 4 PM.
 function toDateStr(d: Date): string {
-  return d.toISOString().split('T')[0]
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 function formatDateLabel(dateStr: string): { label: string; sub: string } {
@@ -61,16 +65,28 @@ export default function BiteClient({ initialSummary, initialDate }: BiteClientPr
     setNavDir(dir)
     setSelectedDate(dateStr)
     startTransition(async () => {
-      const data = await getDaySummary(dateStr)
+      const data = await getDaySummary(dateStr, new Date().getTimezoneOffset())
       setSummary(data)
     })
   }, [])
+
+  // On mount: correct the date if SSR used UTC (wrong for PST users after ~4 PM).
+  // Re-fetch with the correct local date + timezone offset.
+  useEffect(() => {
+    const localToday = toDateStr(new Date())
+    const offset = new Date().getTimezoneOffset()
+    startTransition(async () => {
+      const data = await getDaySummary(localToday, offset)
+      setSummary(data)
+      if (localToday !== selectedDate) setSelectedDate(localToday)
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh data when returning to page (e.g. after logging food)
   useEffect(() => {
     const handleFocus = () => {
       startTransition(async () => {
-        const data = await getDaySummary(selectedDate)
+        const data = await getDaySummary(selectedDate, new Date().getTimezoneOffset())
         setSummary(data)
       })
     }

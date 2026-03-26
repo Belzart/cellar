@@ -63,6 +63,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
   const [textInput, setTextInput] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [photoHint, setPhotoHint] = useState('')  // optional user context sent with photo
   const [analysisResult, setAnalysisResult] = useState<MealAnalysisResult | null>(null)
   const [editedItems, setEditedItems] = useState<MealAnalysisItem[]>([])
   const [mealName, setMealName] = useState('')
@@ -278,7 +279,7 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
       const res = await fetch('/api/analyze-meal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: base64, imageMimeType: mime }),
+        body: JSON.stringify({ imageBase64: base64, imageMimeType: mime, hint: photoHint.trim() || undefined }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Analysis failed')
@@ -682,6 +683,20 @@ export default function LogMealClient({ initialMealType }: LogMealClientProps) {
                 </button>
               </div>
             )}
+            {/* Optional hint — improves AI accuracy for branded/specific foods */}
+            <div>
+              <label className="text-xs font-semibold text-ink-secondary uppercase tracking-wider block mb-1.5">
+                Add details <span className="font-normal normal-case text-ink-tertiary">(optional)</span>
+              </label>
+              <textarea
+                className="w-full bg-surface-card border border-surface-border rounded-xl p-3 text-sm text-ink placeholder:text-ink-tertiary focus:outline-none focus:border-bite/40 resize-none"
+                rows={2}
+                placeholder="e.g., 3x3 burger, battered fish from Trader Joe's, two tacos, animal style…"
+                value={photoHint}
+                onChange={(e) => setPhotoHint(e.target.value)}
+              />
+            </div>
+
             {error && <ErrorBanner message={error} />}
             <button
               onClick={runPhotoAnalysis}

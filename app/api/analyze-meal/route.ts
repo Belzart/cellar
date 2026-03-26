@@ -33,18 +33,67 @@ Rules:
 - If portion size is unclear, estimate a typical single serving and note it
 - Be honest: if you can't see portion size in a photo, say so in confidence_notes
 - Do not over-estimate to avoid health risks; be conservative on calorie counts
-- Break multi-component dishes into separate items when possible (e.g., burger: bun + patty + toppings as one item is fine, but separate items for a full plate)
+- Break multi-component dishes into separate items when possible
 - Confidence 0.9+ = you can clearly identify everything. 0.7-0.9 = reasonable guess. Below 0.7 = significant uncertainty
-- meal_name should be a clean, short display name (not a sentence)`
+- meal_name should be a clean, short display name (not a sentence)
+- IMPORTANT: All string values must not contain literal newlines or control characters`
+
+// Balanced JSON extractor — tracks depth + string boundaries correctly.
+// Safer than greedy regex /\{[\s\S]*\}/ which breaks if AI adds trailing text.
+function extractOutermostJSON(text: string): string | null {
+  let start = -1
+  let depth = 0
+  let inString = false
+  let escape = false
+
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (escape) { escape = false; continue }
+    if (c === '\\' && inString) { escape = true; continue }
+    if (c === '"') { inString = !inString; continue }
+    if (inString) continue
+    if (c === '{') {
+      if (start === -1) start = i
+      depth++
+    } else if (c === '}') {
+      depth--
+      if (depth === 0 && start !== -1) return text.slice(start, i + 1)
+    }
+  }
+  return null
+}
+
+// Replace literal control characters (unescaped newlines etc.) which are
+// technically invalid inside JSON strings — a common AI output artifact.
+function sanitizeJSON(s: string): string {
+  return s.replace(/[\u0000-\u001f\u007f]/g, (c) => {
+    if (c === '\n') return '\\n'
+    if (c === '\r') return '\\r'
+    if (c === '\t') return '\\t'
+    return ' '
+  })
+}
+
+function parseAIJson(rawText: string): unknown {
+  const extracted = extractOutermostJSON(rawText)
+  if (!extracted) throw new Error('No JSON object found in AI response')
+  try {
+    return JSON.parse(extracted)
+  } catch {
+    // Retry after sanitizing control chars in strings
+    return JSON.parse(sanitizeJSON(extracted))
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { text, imageBase64, imageMimeType, refinementNote } = body as {
+    const { text, imageBase64, imageMimeType, refinementNote, hint } = body as {
       text?: string
       imageBase64?: string
       imageMimeType?: string
-      refinementNote?: string  // optional correction hint (e.g. "it was a 3x3", "animal style")
+      refinementNote?: string  // post-analysis correction ("it was a 3x3")
+      hint?: string            // pre-analysis user context added before photo analysis
     }
 
     if (!text && !imageBase64) {
@@ -53,7 +102,6 @@ export async function POST(req: NextRequest) {
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-    // Build message content
     type AllowedMime = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'
     const allowedMimes: AllowedMime[] = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
     const safeMime: AllowedMime = allowedMimes.includes(imageMimeType as AllowedMime)
@@ -69,24 +117,23 @@ export async function POST(req: NextRequest) {
     if (imageBase64) {
       content.push({
         type: 'image',
-        source: {
-          type: 'base64',
-          media_type: safeMime,
-          data: imageBase64,
-        },
+        source: { type: 'base64', media_type: safeMime, data: imageBase64 },
       })
     }
 
     let userText: string
     if (refinementNote) {
-      // Correction loop: user is refining a previous AI result
+      // Post-analysis correction loop
       userText = imageBase64
         ? `Re-analyze this food photo with the following correction from the user: "${refinementNote}". Update the nutritional estimates to reflect this detail.`
-        : `Re-analyze this food with the following correction: "${refinementNote}". Original description: ${text ?? '(photo)'}. Update the estimates to reflect this detail.`
+        : `Re-analyze this food with the following correction: "${refinementNote}". Original: ${text ?? '(photo)'}. Update the estimates.`
+    } else if (imageBase64 && (hint || text)) {
+      // Photo + pre-analysis hint — user gave context before analyzing
+      userText = `Please estimate the nutritional content of the food shown in this photo. User context: "${hint || text}"`
+    } else if (text) {
+      userText = `Please estimate the nutritional content of: ${text}`
     } else {
-      userText = text
-        ? `Please estimate the nutritional content of: ${text}`
-        : 'Please estimate the nutritional content of the food shown in this photo.'
+      userText = 'Please estimate the nutritional content of the food shown in this photo.'
     }
 
     content.push({ type: 'text', text: userText })
@@ -103,18 +150,9 @@ export async function POST(req: NextRequest) {
       .map((b) => (b as { type: 'text'; text: string }).text)
       .join('')
 
-    // Extract JSON from response (handle any extra whitespace)
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      return NextResponse.json({ error: 'Invalid AI response format' }, { status: 500 })
-    }
+    const parsed = parseAIJson(rawText)
 
-    const parsed = JSON.parse(jsonMatch[0])
-
-    return NextResponse.json({
-      result: parsed,
-      rawOutput: rawText,
-    })
+    return NextResponse.json({ result: parsed, rawOutput: rawText })
   } catch (err) {
     console.error('[analyze-meal]', err)
     return NextResponse.json(

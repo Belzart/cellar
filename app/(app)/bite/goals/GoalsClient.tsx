@@ -52,6 +52,9 @@ interface RecsResult {
   protein_note: string
   carbs_g: number
   fat_g: number
+  // Guideline limits (display only — not saved as goals, no DB field needed)
+  sugar_g_limit: number
+  saturated_fat_g_limit: number
 }
 
 export default function GoalsClient({ initialGoals }: GoalsClientProps) {
@@ -141,7 +144,15 @@ export default function GoalsClient({ initialGoals }: GoalsClientProps) {
     const fat_g   = Math.round((remaining * fatFraction) / 9)
     const carbs_g = Math.round((remaining * (1 - fatFraction)) / 4)
 
-    setRecs({ calories: targetCals, protein_min, protein_max, protein_g, protein_note: pc.note, carbs_g, fat_g })
+    // Sugar limit: WHO recommends < 10% of calories from free sugars (~8% as practical target)
+    // This is a guideline, not a hard goal — shown as a ceiling, not a target to hit.
+    const sugar_g_limit = Math.round((targetCals * 0.08) / 4)
+
+    // Saturated fat limit: AHA recommends < 7% of calories; we use 10% as a practical ceiling
+    // that matches most common nutrition label guidance
+    const saturated_fat_g_limit = Math.round((targetCals * 0.10) / 9)
+
+    setRecs({ calories: targetCals, protein_min, protein_max, protein_g, protein_note: pc.note, carbs_g, fat_g, sugar_g_limit, saturated_fat_g_limit })
   }
 
   function applyRecs() {
@@ -432,6 +443,20 @@ export default function GoalsClient({ initialGoals }: GoalsClientProps) {
                   <div className="bg-surface-elevated rounded-xl p-3 text-center">
                     <p className="text-xl font-bold text-ink">~{recs.fat_g}g</p>
                     <p className="text-xs text-ink-tertiary mt-0.5">fat</p>
+                  </div>
+                </div>
+
+                {/* Sugar + Saturated Fat guideline limits */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-center">
+                    <p className="text-xl font-bold text-amber-700">&lt;{recs.sugar_g_limit}g</p>
+                    <p className="text-xs text-amber-600 mt-0.5">sugar limit</p>
+                    <p className="text-[10px] text-amber-500 mt-1">~8% of calories · WHO</p>
+                  </div>
+                  <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 text-center">
+                    <p className="text-xl font-bold text-orange-700">&lt;{recs.saturated_fat_g_limit}g</p>
+                    <p className="text-xs text-orange-600 mt-0.5">sat fat limit</p>
+                    <p className="text-[10px] text-orange-500 mt-1">~10% of calories · AHA</p>
                   </div>
                 </div>
               </div>

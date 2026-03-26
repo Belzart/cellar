@@ -2,9 +2,9 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Trash2, ChevronDown, RotateCcw } from 'lucide-react'
+import { Trash2, ChevronDown, RotateCcw, ArrowLeftRight, Check } from 'lucide-react'
 import { MealEntry, MealAnalysisItem } from '@/lib/types/nutrition'
-import { deleteMealEntry } from '@/lib/actions/nutrition'
+import { deleteMealEntry, moveMealEntry } from '@/lib/actions/nutrition'
 
 interface FoodLogItemProps {
   entry: MealEntry
@@ -19,35 +19,40 @@ function parseBreakdown(notes: string | null): MealAnalysisItem[] | null {
   return null
 }
 
+// Local date string — matches BiteClient's toDateStr to avoid UTC rollover
+function localDateStr(d: Date): string {
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0'),
+  ].join('-')
+}
+
 export default function FoodLogItem({ entry }: FoodLogItemProps) {
   const router = useRouter()
   const [expanded, setExpanded] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [pendingDelete, setPendingDelete] = useState(false)
+  const [moving, setMoving] = useState(false)
+  const [moveSuccess, setMoveSuccess] = useState(false)
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const breakdown = parseBreakdown(entry.notes)
+  const today = localDateStr(new Date())
+  const yesterday = localDateStr(new Date(Date.now() - 86400000))
 
   function startDelete() {
     setPendingDelete(true)
-    undoTimerRef.current = setTimeout(() => {
-      confirmDelete()
-    }, 3000)
+    undoTimerRef.current = setTimeout(() => confirmDelete(), 3000)
   }
 
   function undoDelete() {
     setPendingDelete(false)
-    if (undoTimerRef.current) {
-      clearTimeout(undoTimerRef.current)
-      undoTimerRef.current = null
-    }
+    if (undoTimerRef.current) { clearTimeout(undoTimerRef.current); undoTimerRef.current = null }
   }
 
   async function confirmDelete() {
-    if (undoTimerRef.current) {
-      clearTimeout(undoTimerRef.current)
-      undoTimerRef.current = null
-    }
+    if (undoTimerRef.current) { clearTimeout(undoTimerRef.current); undoTimerRef.current = null }
     setDeleting(true)
     try {
       await deleteMealEntry(entry.id)
@@ -58,7 +63,16 @@ export default function FoodLogItem({ entry }: FoodLogItemProps) {
     }
   }
 
-  // Pending delete state — shows undo bar
+  async function handleMove(toDate: string) {
+    setMoving(true)
+    const result = await moveMealEntry(entry.id, toDate, new Date().getTimezoneOffset())
+    if (!result.error) {
+      setMoveSuccess(true)
+      setTimeout(() => router.refresh(), 700)
+    }
+    setMoving(false)
+  }
+
   if (pendingDelete) {
     return (
       <div className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-red-50 border border-red-100 mx-1 my-0.5">
@@ -66,14 +80,20 @@ export default function FoodLogItem({ entry }: FoodLogItemProps) {
           {deleting ? 'Removing…' : 'Removed'}
         </span>
         {!deleting && (
-          <button
-            onClick={undoDelete}
-            className="flex items-center gap-1 text-xs font-semibold text-red-600 active:scale-95 transition-transform"
-          >
+          <button onClick={undoDelete} className="flex items-center gap-1 text-xs font-semibold text-red-600 active:scale-95 transition-transform">
             <RotateCcw className="w-3 h-3" />
             Undo
           </button>
         )}
+      </div>
+    )
+  }
+
+  if (moveSuccess) {
+    return (
+      <div className="flex items-center gap-2 py-2.5 px-3 rounded-xl bg-green-50 border border-green-100 mx-1 my-0.5">
+        <Check className="w-3.5 h-3.5 text-green-600" />
+        <span className="text-sm text-green-700 font-medium">Moved</span>
       </div>
     )
   }
@@ -98,7 +118,6 @@ export default function FoodLogItem({ entry }: FoodLogItemProps) {
           </div>
         </button>
 
-        {/* Always-visible delete button */}
         <button
           onClick={startDelete}
           className="w-8 h-8 flex items-center justify-center rounded-full text-ink-tertiary hover:text-red-400 active:scale-90 transition-all flex-shrink-0 mr-1"
@@ -108,27 +127,20 @@ export default function FoodLogItem({ entry }: FoodLogItemProps) {
       </div>
 
       {expanded && (
-        <div className="mx-3 mb-2 bg-surface-elevated rounded-xl p-3 space-y-2">
-          {/* Total macros */}
+        <div className="mx-3 mb-2 bg-surface-elevated rounded-xl p-3 space-y-3">
+          {/* Macros row */}
           <div className="flex gap-4 text-xs">
-            <div className="text-center">
-              <p className="font-semibold text-ink">{Math.round(Number(entry.protein_g))}g</p>
-              <p className="text-ink-tertiary">Protein</p>
-            </div>
-            <div className="text-center">
-              <p className="font-semibold text-ink">{Math.round(Number(entry.carbs_g))}g</p>
-              <p className="text-ink-tertiary">Carbs</p>
-            </div>
-            <div className="text-center">
-              <p className="font-semibold text-ink">{Math.round(Number(entry.fat_g))}g</p>
-              <p className="text-ink-tertiary">Fat</p>
-            </div>
-            {entry.fiber_g != null && (
-              <div className="text-center">
-                <p className="font-semibold text-ink">{Math.round(Number(entry.fiber_g))}g</p>
-                <p className="text-ink-tertiary">Fiber</p>
+            {[
+              { label: 'Protein', val: entry.protein_g },
+              { label: 'Carbs', val: entry.carbs_g },
+              { label: 'Fat', val: entry.fat_g },
+              ...(entry.fiber_g != null ? [{ label: 'Fiber', val: entry.fiber_g }] : []),
+            ].map(({ label, val }) => (
+              <div key={label} className="text-center">
+                <p className="font-semibold text-ink">{Math.round(Number(val))}g</p>
+                <p className="text-ink-tertiary">{label}</p>
               </div>
-            )}
+            ))}
           </div>
 
           {/* Ingredient breakdown */}
@@ -153,6 +165,30 @@ export default function FoodLogItem({ entry }: FoodLogItemProps) {
               ))}
             </div>
           )}
+
+          {/* Move to another day */}
+          <div className="pt-2 border-t border-surface-border">
+            <p className="text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-2 flex items-center gap-1">
+              <ArrowLeftRight className="w-3 h-3" />
+              Move to day
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleMove(yesterday)}
+                disabled={moving}
+                className="flex-1 py-1.5 rounded-lg text-xs font-medium bg-surface-card border border-surface-border text-ink-secondary active:scale-95 transition-all disabled:opacity-40"
+              >
+                {moving ? '…' : 'Yesterday'}
+              </button>
+              <button
+                onClick={() => handleMove(today)}
+                disabled={moving}
+                className="flex-1 py-1.5 rounded-lg text-xs font-medium bg-surface-card border border-surface-border text-ink-secondary active:scale-95 transition-all disabled:opacity-40"
+              >
+                {moving ? '…' : 'Today'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

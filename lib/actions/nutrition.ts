@@ -49,14 +49,20 @@ export async function upsertGoals(input: UpdateGoalsInput): Promise<NutritionGoa
 
 // ── Day Summary ───────────────────────────────────────────────
 
-export async function getDaySummary(date?: string): Promise<DaySummary | null> {
+export async function getDaySummary(date?: string, tzOffsetMinutes = 0): Promise<DaySummary | null> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
   const targetDate = date ?? new Date().toISOString().split('T')[0]
-  const start = `${targetDate}T00:00:00.000Z`
-  const end   = `${targetDate}T23:59:59.999Z`
+
+  // Compute UTC range for the LOCAL calendar day.
+  // tzOffsetMinutes = browser's getTimezoneOffset() (positive west of UTC, e.g. 480 for PST).
+  // Local midnight in UTC = `${targetDate}T00:00:00Z` shifted by tzOffset.
+  // Without this, PST users at 11 PM see "tomorrow" because UTC has rolled over.
+  const localMidnightUTC = new Date(`${targetDate}T00:00:00.000Z`).getTime() + tzOffsetMinutes * 60000
+  const start = new Date(localMidnightUTC).toISOString()
+  const end   = new Date(localMidnightUTC + 86400000 - 1).toISOString()
 
   const [entriesRes, goalsRes, waterRes, stepsRes] = await Promise.all([
     supabase
@@ -365,5 +371,39 @@ export async function getRecentEntries(limit = 10): Promise<MealEntry[]> {
     .limit(limit)
 
   return (data ?? []) as MealEntry[]
+}
+
+// ── Move Entry to Another Day ─────────────────────────────────
+
+// Reassigns a meal entry to a different calendar date.
+// Sets logged_at to local noon of the target date (12:00 local time) so it
+// appears correctly on that day regardless of timezone.
+// tzOffsetMinutes: browser's getTimezoneOffset() (e.g. 480 for PST).
+export async function moveMealEntry(
+  id: string,
+  toDate: string,
+  tzOffsetMinutes = 0
+): Promise<{ error: string | null }> {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Not authenticated' }
+
+    // Noon of the target LOCAL date in UTC
+    const localNoonUTC = new Date(`${toDate}T12:00:00.000Z`).getTime() + tzOffsetMinutes * 60000
+    const logged_at = new Date(localNoonUTC).toISOString()
+
+    const { error } = await supabase
+      .from('meal_entries')
+      .update({ logged_at })
+      .eq('id', id)
+      .eq('user_id', user.id)
+
+    if (error) return { error: error.message }
+    revalidatePath('/bite')
+    return { error: null }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to move entry' }
+  }
 }
 
